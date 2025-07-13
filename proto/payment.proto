@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package rinha_2025;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/diogomassis/rinha-2025/proto";
+
+message PaymentRequest {
+    string correlationId = 1;
+    double amount = 2;
+}
+
+message PaymentResponse {
+    int32 code = 1;
+    string message = 2;
+}
+
+service PaymentService {
+    rpc Payments(PaymentRequest) returns (PaymentResponse) {
+        option (google.api.http) = {
+            post: "/payments",
+            body: "*"
+        };
+    }
+}
