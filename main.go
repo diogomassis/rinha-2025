@@ -12,20 +12,10 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	pb "github.com/diogomassis/rinha-2025/proto"
+	"github.com/diogomassis/rinha-2025/server"
 )
 
 var addrGrpcServer string = "0.0.0.0:3030"
-
-type Server struct {
-	pb.TestServiceServer
-}
-
-func (s *Server) Test(ctx context.Context, in *pb.TestRequest) (*pb.TestResponse, error) {
-	log.Printf("Test function was invoked with %v\n", in)
-	return &pb.TestResponse{
-		Result: "Hello, World",
-	}, nil
-}
 
 func main() {
 	// Start gRPC server
@@ -37,7 +27,7 @@ func main() {
 		log.Printf("gRPC server listening at %s", addrGrpcServer)
 
 		s := grpc.NewServer()
-		pb.RegisterTestServiceServer(s, &Server{})
+		pb.RegisterPaymentServiceServer(s, &server.Server{})
 		reflection.Register(s)
 		if err = s.Serve(lis); err != nil {
 			panic(err)
@@ -49,14 +39,14 @@ func main() {
 	mux := runtime.NewServeMux()
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 
-	err := pb.RegisterTestServiceHandlerFromEndpoint(ctx, mux, addrGrpcServer, opts)
+	err := pb.RegisterPaymentServiceHandlerFromEndpoint(ctx, mux, addrGrpcServer, opts)
 	if err != nil {
 		panic(err)
 	}
 
 	port := ":8081"
 	log.Printf("HTTP gateway listening at %s", port)
-	log.Printf("HTTP route available at: GET http://localhost%s/v1/test", port)
+	log.Printf("HTTP route available at: POST http://localhost%s/payments", port)
 	if err := http.ListenAndServe(port, mux); err != nil {
 		panic(err)
 	}
