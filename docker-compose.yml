@@ -10,11 +10,11 @@ services:
       - app2
 
   app1:
-    build: ./app
+    image: rinha-2025
     environment:
       - INSTANCE_NAME=App-01
 
   app2:
-    build: ./app
+    image: rinha-2025
     environment:
       - INSTANCE_NAME=App-02
