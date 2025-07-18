@@ -205,3 +205,98 @@ func (wp *WorkerPool) SubmitJob(ctx context.Context, request *pb.PaymentRequest)
 		return nil, ctx.Err()
 	}
 }
+
+func (wp *WorkerPool) GetPaymentsSummary(from, to string) (*pb.PaymentsSummaryResponse, error) {
+	ctx := context.Background()
+
+	response := &pb.PaymentsSummaryResponse{
+		Default:  &pb.ProcessorSummary{},
+		Fallback: &pb.ProcessorSummary{},
+	}
+
+	var fromTime, toTime int64
+	if from != "" {
+		if parsedFrom, err := time.Parse(time.RFC3339, from); err == nil {
+			fromTime = parsedFrom.Unix()
+		}
+	}
+	if to != "" {
+		if parsedTo, err := time.Parse(time.RFC3339, to); err == nil {
+			toTime = parsedTo.Unix()
+		}
+	}
+
+	for _, processorName := range []string{"default", "fallback"} {
+		var totalRequests int64
+		var totalAmount float64
+
+		if fromTime > 0 || toTime > 0 {
+			listKey := fmt.Sprintf("payments:list:%s", processorName)
+
+			min := "-inf"
+			max := "+inf"
+			if fromTime > 0 {
+				min = fmt.Sprintf("%d", fromTime)
+			}
+			if toTime > 0 {
+				max = fmt.Sprintf("%d", toTime)
+			}
+
+			correlationIds, err := wp.redisClient.ZRangeByScore(ctx, listKey, &redis.ZRangeBy{
+				Min: min,
+				Max: max,
+			}).Result()
+
+			if err != nil && err != redis.Nil {
+				log.Printf("Failed to get payments in range for %s: %v", processorName, err)
+				continue
+			}
+
+			for _, correlationId := range correlationIds {
+				recordKey := fmt.Sprintf("payment:%s", correlationId)
+				recordJSON, err := wp.redisClient.Get(ctx, recordKey).Result()
+				if err != nil {
+					continue
+				}
+
+				var record map[string]interface{}
+				if err := json.Unmarshal([]byte(recordJSON), &record); err != nil {
+					continue
+				}
+
+				if record["processor"] == processorName {
+					totalRequests++
+					if amount, ok := record["amount"].(float64); ok {
+						totalAmount += amount
+					}
+				}
+			}
+		} else {
+			countKey := fmt.Sprintf("payments:%s:count", processorName)
+			count, err := wp.redisClient.Get(ctx, countKey).Int64()
+			if err != nil && err != redis.Nil {
+				log.Printf("Failed to get count for %s: %v", processorName, err)
+			} else {
+				totalRequests = count
+			}
+
+			amountKey := fmt.Sprintf("payments:%s:amount", processorName)
+			amount, err := wp.redisClient.Get(ctx, amountKey).Float64()
+			if err != nil && err != redis.Nil {
+				log.Printf("Failed to get amount for %s: %v", processorName, err)
+			} else {
+				totalAmount = amount
+			}
+		}
+
+		if processorName == "default" {
+			response.Default.TotalRequests = totalRequests
+			response.Default.TotalAmount = totalAmount
+		} else {
+			response.Fallback.TotalRequests = totalRequests
+			response.Fallback.TotalAmount = totalAmount
+		}
+	}
+
+	return response, nil
+}
