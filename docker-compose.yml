@@ -20,12 +20,28 @@ services:
       - app1
       - app2
 
-  app1:
-    image: rinha-2025
-    environment:
-      - INSTANCE_NAME=App-01
+  # NATS messaging server
+  nats:
+    image: nats:latest
+    container_name: nats-server
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    restart: unless-stopped
+    volumes:
+      - ./nats-data:/data
 
-  app2:
-    image: rinha-2025
-    environment:
-      - INSTANCE_NAME=App-02
+  # Redis in-memory data store
+  redis:
+    image: "redis:latest"
+    container_name: redis-server
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis-data:/data
+    restart: unless-stopped
+
+# Volumes for persistent data storage
+volumes:
+  redis-data:
+  nats-data:
