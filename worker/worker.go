@@ -133,6 +133,20 @@ func (wp *WorkerPool) worker(id int) {
 		}
 	}
 }
+
+func (wp *WorkerPool) selectBestProcessor() PaymentProcessor {
+	wp.healthMutex.RLock()
+	defer wp.healthMutex.RUnlock()
+
+	if health, exists := wp.healthCheckCache["default"]; exists && !health.Failing {
+		return wp.processors[0]
+	}
+	if health, exists := wp.healthCheckCache["fallback"]; exists && !health.Failing {
+		return wp.processors[1]
+	}
+	return wp.processors[0]
+}
+
 func (wp *WorkerPool) healthCheckRoutine() {
 	ticker := time.NewTicker(6 * time.Second)
 	defer ticker.Stop()
