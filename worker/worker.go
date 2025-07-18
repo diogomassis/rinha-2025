@@ -96,21 +96,28 @@ func (wp *WorkerPool) worker(id int) {
 	defer wp.wg.Done()
 	log.Printf("Worker %d started", id)
 
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
 	for {
 		select {
 		case job := <-wp.jobQueue:
 			log.Printf("Worker %d processing payment for correlation ID: %s", id, job.Request.CorrelationId)
-
-			// Simulate payment processing time
-			time.Sleep(time.Millisecond * 100)
-
-			// Process the payment
-			response := &pb.PaymentResponse{
-				Code:    http.StatusOK,
-				Message: "Payment processed successfully by worker " + string(rune(id+'0')) + ". Correlation Id: " + job.Request.CorrelationId,
+			if err := wp.markPaymentInProgress(job.Request.CorrelationId); err != nil {
+				log.Printf("Worker %d: failed to mark payment in progress: %v", id, err)
 			}
 
-			// Send response back
+			response, err := wp.processPayment(client, job.Request)
+			if err != nil {
+				wp.cleanupInProgressMarker(job.Request.CorrelationId)
+				select {
+				case job.ErrorCh <- err:
+				case <-time.After(1 * time.Second):
+					log.Printf("Worker %d: timeout sending error response", id)
+				}
+				continue
+			}
+
 			select {
 			case job.ResponseCh <- response:
 			case <-time.After(5 * time.Second):
