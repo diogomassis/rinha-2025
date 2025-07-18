@@ -133,6 +133,41 @@ func (wp *WorkerPool) worker(id int) {
 		}
 	}
 }
+func (wp *WorkerPool) tryFallbackProcessor(client *http.Client, request *pb.PaymentRequest) (*pb.PaymentResponse, error) {
+	fallbackProcessor := PaymentProcessor{Name: "fallback", URL: "http://payment-processor-fallback:8080"}
+
+	paymentReq := PaymentProcessorRequest{
+		CorrelationID: request.CorrelationId,
+		Amount:        request.Amount,
+		RequestedAt:   time.Now().UTC(),
+	}
+	jsonData, err := json.Marshal(paymentReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal fallback payment request: %v", err)
+	}
+	url := fmt.Sprintf("%s/payments", fallbackProcessor.URL)
+	resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("fallback processor request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("fallback processor returned status %d", resp.StatusCode)
+	}
+	err = wp.storePaymentData(fallbackProcessor.Name, request.Amount, request.CorrelationId)
+	if err != nil {
+		log.Printf("Failed to store fallback payment data: %v", err)
+	}
+	var procResp PaymentProcessorResponse
+	if err := json.NewDecoder(resp.Body).Decode(&procResp); err != nil {
+		return nil, fmt.Errorf("failed to decode fallback processor response: %v", err)
+	}
+	return &pb.PaymentResponse{
+		Code:    int32(resp.StatusCode),
+		Message: procResp.Message,
+	}, nil
+}
 
 func (wp *WorkerPool) selectBestProcessor() PaymentProcessor {
 	wp.healthMutex.RLock()
