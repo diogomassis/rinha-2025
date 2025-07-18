@@ -128,7 +128,42 @@ func (wp *WorkerPool) worker(id int) {
 	}
 }
 
-// PaymentError represents a payment processing error
+func (wp *WorkerPool) checkProcessorHealth(client *http.Client, processor PaymentProcessor) {
+	wp.healthMutex.Lock()
+	lastCheck, exists := wp.lastHealthCheck[processor.Name]
+	if exists && time.Since(lastCheck) < 5*time.Second {
+		wp.healthMutex.Unlock()
+		return
+	}
+	wp.lastHealthCheck[processor.Name] = time.Now()
+	wp.healthMutex.Unlock()
+
+	url := fmt.Sprintf("%s/payments/service-health", processor.URL)
+	resp, err := client.Get(url)
+	if err != nil {
+		log.Printf("Health check failed for %s: %v", processor.Name, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 429 {
+		log.Printf("Rate limited on health check for %s", processor.Name)
+		return
+	}
+
+	var health HealthCheckResponse
+	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
+		log.Printf("Failed to decode health response for %s: %v", processor.Name, err)
+		return
+	}
+
+	wp.healthMutex.Lock()
+	wp.healthCheckCache[processor.Name] = &health
+	wp.healthMutex.Unlock()
+
+	log.Printf("Health check for %s: failing=%t, minResponseTime=%dms",
+		processor.Name, health.Failing, health.MinResponseTime)
+}
 type PaymentError struct {
 	Message string
 }
