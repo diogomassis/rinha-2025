@@ -114,7 +114,6 @@ func (wp *WorkerPool) worker(id int) {
 			select {
 			case job.ResponseCh <- response:
 			case <-time.After(5 * time.Second):
-				// Timeout sending response
 				select {
 				case job.ErrorCh <- &PaymentError{Message: "Timeout sending response"}:
 				default:
@@ -172,7 +171,6 @@ func (e *PaymentError) Error() string {
 	return e.Message
 }
 
-// SubmitJob submits a job to the worker pool and returns the response
 func (wp *WorkerPool) SubmitJob(ctx context.Context, request *pb.PaymentRequest) (*pb.PaymentResponse, error) {
 	responseCh := make(chan *pb.PaymentResponse, 1)
 	errorCh := make(chan error, 1)
@@ -183,23 +181,20 @@ func (wp *WorkerPool) SubmitJob(ctx context.Context, request *pb.PaymentRequest)
 		ErrorCh:    errorCh,
 	}
 
-	// Submit job to queue with timeout
 	select {
 	case wp.jobQueue <- job:
-		// Job submitted successfully
 	case <-time.After(1 * time.Second):
 		return nil, &PaymentError{Message: "Worker pool queue is full, request timeout"}
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
 
-	// Wait for response with timeout
 	select {
 	case response := <-responseCh:
 		return response, nil
 	case err := <-errorCh:
 		return nil, err
-	case <-time.After(10 * time.Second):
+	case <-time.After(30 * time.Second):
 		return nil, &PaymentError{Message: "Payment processing timeout"}
 	case <-ctx.Done():
 		return nil, ctx.Err()
