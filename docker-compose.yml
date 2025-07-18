@@ -1,15 +1,36 @@
 services:
-  # Backend applications
   app1:
     image: rinha-2025
     environment:
       - INSTANCE_NAME=App-01
+    depends_on:
+      - redis
+      - nats
+    networks:
+      - payment-processor
+      - rinha-network
+    deploy:
+      resources:
+        limits:
+          cpus: "0.6"
+          memory: "150MB"
+
   app2:
     image: rinha-2025
     environment:
       - INSTANCE_NAME=App-02
+    depends_on:
+      - redis
+      - nats
+    networks:
+      - payment-processor
+      - rinha-network
+    deploy:
+      resources:
+        limits:
+          cpus: "0.6"
+          memory: "150MB"
 
-  # Nginx web server
   nginx:
     image: nginx:alpine
     ports:
@@ -19,29 +40,48 @@ services:
     depends_on:
       - app1
       - app2
+    networks:
+      - rinha-network
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: "20MB"
 
-  # NATS messaging server
   nats:
     image: nats:latest
     container_name: nats-server
-    ports:
-      - "4222:4222"
-      - "8222:8222"
+    networks:
+      - rinha-network
     restart: unless-stopped
     volumes:
       - ./nats-data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: "15MB"
 
-  # Redis in-memory data store
   redis:
     image: "redis:latest"
     container_name: redis-server
-    ports:
-      - "6379:6379"
+    networks:
+      - rinha-network
     volumes:
       - ./redis-data:/data
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: "15MB"
 
-# Volumes for persistent data storage
+networks:
+  payment-processor:
+    external: true
+  rinha-network:
+    driver: bridge
+
 volumes:
   redis-data:
   nats-data:
