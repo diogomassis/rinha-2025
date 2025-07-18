@@ -1,14 +1,40 @@
 package worker
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
 	"time"
 
 	pb "github.com/diogomassis/rinha-2025/proto"
+	"github.com/diogomassis/rinha-2025/validator"
+	"github.com/go-redis/redis/v8"
+	"github.com/nats-io/nats.go"
 )
+
+type PaymentProcessor struct {
+	Name string
+	URL  string
+}
+
+type PaymentProcessorRequest struct {
+	CorrelationID string    `json:"correlationId"`
+	Amount        float64   `json:"amount"`
+	RequestedAt   time.Time `json:"requestedAt"`
+}
+
+type PaymentProcessorResponse struct {
+	Message string `json:"message"`
+}
+
+type HealthCheckResponse struct {
+	Failing         bool `json:"failing"`
+	MinResponseTime int  `json:"minResponseTime"`
+}
 
 type PaymentJob struct {
 	Request    *pb.PaymentRequest
