@@ -300,3 +300,25 @@ func (wp *WorkerPool) GetPaymentsSummary(from, to string) (*pb.PaymentsSummaryRe
 
 	return response, nil
 }
+func (wp *WorkerPool) startMaintenanceRoutines() {
+	validationTicker := time.NewTicker(5 * time.Minute)
+	defer validationTicker.Stop()
+
+	cleanupTicker := time.NewTicker(1 * time.Hour)
+	defer cleanupTicker.Stop()
+
+	for {
+		select {
+		case <-validationTicker.C:
+			if err := wp.validator.ValidateConsistency(); err != nil {
+				log.Printf("Validation check failed: %v", err)
+			}
+		case <-cleanupTicker.C:
+			if err := wp.validator.CleanupOldRecords(24 * time.Hour); err != nil {
+				log.Printf("Cleanup failed: %v", err)
+			}
+		case <-wp.quit:
+			return
+		}
+	}
+}
