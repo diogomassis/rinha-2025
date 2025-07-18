@@ -19,7 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	PaymentService_Payments_FullMethodName = "/rinha_2025.PaymentService/Payments"
+	PaymentService_Payments_FullMethodName        = "/rinha_2025.PaymentService/Payments"
+	PaymentService_PaymentsSummary_FullMethodName = "/rinha_2025.PaymentService/PaymentsSummary"
 )
 
 // PaymentServiceClient is the client API for PaymentService service.
@@ -27,6 +28,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type PaymentServiceClient interface {
 	Payments(ctx context.Context, in *PaymentRequest, opts ...grpc.CallOption) (*PaymentResponse, error)
+	PaymentsSummary(ctx context.Context, in *PaymentsSummaryRequest, opts ...grpc.CallOption) (*PaymentsSummaryResponse, error)
 }
 
 type paymentServiceClient struct {
@@ -47,11 +49,22 @@ func (c *paymentServiceClient) Payments(ctx context.Context, in *PaymentRequest,
 	return out, nil
 }
 
+func (c *paymentServiceClient) PaymentsSummary(ctx context.Context, in *PaymentsSummaryRequest, opts ...grpc.CallOption) (*PaymentsSummaryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PaymentsSummaryResponse)
+	err := c.cc.Invoke(ctx, PaymentService_PaymentsSummary_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PaymentServiceServer is the server API for PaymentService service.
 // All implementations must embed UnimplementedPaymentServiceServer
 // for forward compatibility.
 type PaymentServiceServer interface {
 	Payments(context.Context, *PaymentRequest) (*PaymentResponse, error)
+	PaymentsSummary(context.Context, *PaymentsSummaryRequest) (*PaymentsSummaryResponse, error)
 	mustEmbedUnimplementedPaymentServiceServer()
 }
 
@@ -64,6 +77,9 @@ type UnimplementedPaymentServiceServer struct{}
 
 func (UnimplementedPaymentServiceServer) Payments(context.Context, *PaymentRequest) (*PaymentResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Payments not implemented")
+}
+func (UnimplementedPaymentServiceServer) PaymentsSummary(context.Context, *PaymentsSummaryRequest) (*PaymentsSummaryResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PaymentsSummary not implemented")
 }
 func (UnimplementedPaymentServiceServer) mustEmbedUnimplementedPaymentServiceServer() {}
 func (UnimplementedPaymentServiceServer) testEmbeddedByValue()                        {}
@@ -104,6 +120,24 @@ func _PaymentService_Payments_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PaymentService_PaymentsSummary_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PaymentsSummaryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaymentServiceServer).PaymentsSummary(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PaymentService_PaymentsSummary_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaymentServiceServer).PaymentsSummary(ctx, req.(*PaymentsSummaryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PaymentService_ServiceDesc is the grpc.ServiceDesc for PaymentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -114,6 +148,10 @@ var PaymentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Payments",
 			Handler:    _PaymentService_Payments_Handler,
+		},
+		{
+			MethodName: "PaymentsSummary",
+			Handler:    _PaymentService_PaymentsSummary_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
