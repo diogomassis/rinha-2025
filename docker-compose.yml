@@ -1,4 +1,15 @@
 services:
+  # Backend applications
+  app1:
+    image: rinha-2025
+    environment:
+      - INSTANCE_NAME=App-01
+  app2:
+    image: rinha-2025
+    environment:
+      - INSTANCE_NAME=App-02
+
+  # Nginx web server
   nginx:
     image: nginx:alpine
     ports:
