@@ -133,6 +133,25 @@ func (wp *WorkerPool) worker(id int) {
 		}
 	}
 }
+func (wp *WorkerPool) healthCheckRoutine() {
+	ticker := time.NewTicker(6 * time.Second)
+	defer ticker.Stop()
+
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
+
+	for {
+		select {
+		case <-ticker.C:
+			for _, processor := range wp.processors {
+				wp.checkProcessorHealth(client, processor)
+			}
+		case <-wp.quit:
+			return
+		}
+	}
+}
 
 func (wp *WorkerPool) checkProcessorHealth(client *http.Client, processor PaymentProcessor) {
 	wp.healthMutex.Lock()
