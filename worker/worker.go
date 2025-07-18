@@ -300,6 +300,38 @@ func (wp *WorkerPool) GetPaymentsSummary(from, to string) (*pb.PaymentsSummaryRe
 
 	return response, nil
 }
+
+func (wp *WorkerPool) CheckCorrelationIdExists(ctx context.Context, correlationId string) (bool, error) {
+	recordKey := fmt.Sprintf("payment:%s", correlationId)
+	exists, err := wp.redisClient.Exists(ctx, recordKey).Result()
+	if err != nil {
+		return false, fmt.Errorf("failed to check correlation ID existence: %v", err)
+	}
+	if exists > 0 {
+		return true, nil
+	}
+
+	progressKey := fmt.Sprintf("payment:progress:%s", correlationId)
+	inProgress, err := wp.redisClient.Exists(ctx, progressKey).Result()
+	if err != nil {
+		return false, fmt.Errorf("failed to check correlation ID in progress: %v", err)
+	}
+
+	return inProgress > 0, nil
+}
+
+func (wp *WorkerPool) markPaymentInProgress(correlationId string) error {
+	ctx := context.Background()
+	progressKey := fmt.Sprintf("payment:progress:%s", correlationId)
+	return wp.redisClient.SetNX(ctx, progressKey, time.Now().Unix(), 5*time.Minute).Err()
+}
+
+func (wp *WorkerPool) cleanupInProgressMarker(correlationId string) {
+	ctx := context.Background()
+	progressKey := fmt.Sprintf("payment:progress:%s", correlationId)
+	wp.redisClient.Del(ctx, progressKey)
+}
+
 func (wp *WorkerPool) startMaintenanceRoutines() {
 	validationTicker := time.NewTicker(5 * time.Minute)
 	defer validationTicker.Stop()
