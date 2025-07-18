@@ -43,17 +43,35 @@ type PaymentJob struct {
 }
 
 type WorkerPool struct {
-	jobQueue    chan PaymentJob
-	workerCount int
-	wg          sync.WaitGroup
-	quit        chan bool
+	jobQueue         chan PaymentJob
+	workerCount      int
+	wg               sync.WaitGroup
+	quit             chan bool
+	processors       []PaymentProcessor
+	redisClient      *redis.Client
+	natsConn         *nats.Conn
+	healthCheckCache map[string]*HealthCheckResponse
+	healthMutex      sync.RWMutex
+	lastHealthCheck  map[string]time.Time
+	validator        *validator.PaymentValidator
 }
 
-func NewWorkerPool(workerCount, queueSize int) *WorkerPool {
+func NewWorkerPool(workerCount, queueSize int, redisClient *redis.Client, natsConn *nats.Conn) *WorkerPool {
+	processors := []PaymentProcessor{
+		{Name: "default", URL: "http://payment-processor-default:8080"},
+		{Name: "fallback", URL: "http://payment-processor-fallback:8080"},
+	}
+
 	return &WorkerPool{
-		jobQueue:    make(chan PaymentJob, queueSize),
-		workerCount: workerCount,
-		quit:        make(chan bool),
+		jobQueue:         make(chan PaymentJob, queueSize),
+		workerCount:      workerCount,
+		quit:             make(chan bool),
+		processors:       processors,
+		redisClient:      redisClient,
+		natsConn:         natsConn,
+		healthCheckCache: make(map[string]*HealthCheckResponse),
+		lastHealthCheck:  make(map[string]time.Time),
+		validator:        validator.NewPaymentValidator(redisClient),
 	}
 }
 
