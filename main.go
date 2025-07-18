@@ -46,11 +46,11 @@ func main() {
 		defer natsConn.Close()
 	}
 
-	workerPool := worker.NewWorkerPool(10, 1000, redisClient, natsConn)
+	workerPool := worker.NewRinhaWorkerPool(10, 1000, redisClient, natsConn)
 	workerPool.Start()
 	defer workerPool.Stop()
 
-	paymentServer := server.NewServer(workerPool)
+	paymentServer := server.NewRinhaServer(workerPool)
 
 	go func() {
 		lis, err := net.Listen("tcp", addrGrpcServer)

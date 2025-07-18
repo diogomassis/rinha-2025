@@ -10,18 +10,18 @@ import (
 	"github.com/google/uuid"
 )
 
-type Server struct {
+type RinhaServer struct {
 	pb.PaymentServiceServer
-	workerPool *worker.WorkerPool
+	workerPool *worker.RinhaWorkerPool
 }
 
-func NewServer(workerPool *worker.WorkerPool) *Server {
-	return &Server{
+func NewRinhaServer(workerPool *worker.RinhaWorkerPool) *RinhaServer {
+	return &RinhaServer{
 		workerPool: workerPool,
 	}
 }
 
-func (s *Server) Payments(ctx context.Context, in *pb.PaymentRequest) (*pb.PaymentResponse, error) {
+func (s *RinhaServer) Payments(ctx context.Context, in *pb.PaymentRequest) (*pb.PaymentResponse, error) {
 	log.Printf("Processing payment request for correlation ID: %s, amount: %.2f", in.CorrelationId, in.Amount)
 
 	if in.CorrelationId == "" {
@@ -78,7 +78,7 @@ func (s *Server) Payments(ctx context.Context, in *pb.PaymentRequest) (*pb.Payme
 	return response, nil
 }
 
-func (s *Server) PaymentsSummary(ctx context.Context, in *pb.PaymentsSummaryRequest) (*pb.PaymentsSummaryResponse, error) {
+func (s *RinhaServer) PaymentsSummary(ctx context.Context, in *pb.PaymentsSummaryRequest) (*pb.PaymentsSummaryResponse, error) {
 	log.Printf("Retrieving payments summary from=%s to=%s", in.From, in.To)
 
 	summary, err := s.workerPool.GetPaymentsSummary(in.From, in.To)

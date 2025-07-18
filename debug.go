@@ -11,7 +11,7 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
-type DebugHandler struct {
+type RinhaDebugHandler struct {
 	redisClient *redis.Client
 }
 
@@ -23,13 +23,13 @@ type PaymentDebugInfo struct {
 	StoredData    string    `json:"storedData"`
 }
 
-func NewDebugHandler(redisClient *redis.Client) *DebugHandler {
-	return &DebugHandler{
+func NewDebugHandler(redisClient *redis.Client) *RinhaDebugHandler {
+	return &RinhaDebugHandler{
 		redisClient: redisClient,
 	}
 }
 
-func (dh *DebugHandler) DebugPayment(w http.ResponseWriter, r *http.Request) {
+func (dh *RinhaDebugHandler) DebugPayment(w http.ResponseWriter, r *http.Request) {
 	correlationId := r.URL.Query().Get("correlationId")
 	if correlationId == "" {
 		http.Error(w, "correlationId parameter required", http.StatusBadRequest)
@@ -69,7 +69,7 @@ func (dh *DebugHandler) DebugPayment(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(debugInfo)
 }
 
-func (dh *DebugHandler) DebugSummary(w http.ResponseWriter, r *http.Request) {
+func (dh *RinhaDebugHandler) DebugSummary(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
 
 	summary := make(map[string]interface{})
@@ -95,7 +95,7 @@ func (dh *DebugHandler) DebugSummary(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(summary)
 }
 
-func (dh *DebugHandler) ListPayments(w http.ResponseWriter, r *http.Request) {
+func (dh *RinhaDebugHandler) ListPayments(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
 	processor := r.URL.Query().Get("processor")
 	if processor == "" {

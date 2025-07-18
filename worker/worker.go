@@ -42,7 +42,7 @@ type PaymentJob struct {
 	ErrorCh    chan error
 }
 
-type WorkerPool struct {
+type RinhaWorkerPool struct {
 	jobQueue         chan PaymentJob
 	workerCount      int
 	wg               sync.WaitGroup
@@ -56,13 +56,13 @@ type WorkerPool struct {
 	validator        *validator.PaymentValidator
 }
 
-func NewWorkerPool(workerCount, queueSize int, redisClient *redis.Client, natsConn *nats.Conn) *WorkerPool {
+func NewRinhaWorkerPool(workerCount, queueSize int, redisClient *redis.Client, natsConn *nats.Conn) *RinhaWorkerPool {
 	processors := []PaymentProcessor{
 		{Name: "default", URL: "http://payment-processor-default:8080"},
 		{Name: "fallback", URL: "http://payment-processor-fallback:8080"},
 	}
 
-	return &WorkerPool{
+	return &RinhaWorkerPool{
 		jobQueue:         make(chan PaymentJob, queueSize),
 		workerCount:      workerCount,
 		quit:             make(chan bool),
@@ -75,7 +75,7 @@ func NewWorkerPool(workerCount, queueSize int, redisClient *redis.Client, natsCo
 	}
 }
 
-func (wp *WorkerPool) Start() {
+func (wp *RinhaWorkerPool) Start() {
 	log.Printf("Starting worker pool with %d workers", wp.workerCount)
 
 	for i := 0; i < wp.workerCount; i++ {
@@ -88,7 +88,7 @@ func (wp *WorkerPool) Start() {
 	go wp.startMaintenanceRoutines()
 }
 
-func (wp *WorkerPool) Stop() {
+func (wp *RinhaWorkerPool) Stop() {
 	log.Println("Stopping worker pool...")
 	close(wp.quit)
 	wp.wg.Wait()
@@ -96,7 +96,7 @@ func (wp *WorkerPool) Stop() {
 	log.Println("Worker pool stopped")
 }
 
-func (wp *WorkerPool) worker(id int) {
+func (wp *RinhaWorkerPool) worker(id int) {
 	defer wp.wg.Done()
 	log.Printf("Worker %d started", id)
 
@@ -138,7 +138,7 @@ func (wp *WorkerPool) worker(id int) {
 	}
 }
 
-func (wp *WorkerPool) processPayment(client *http.Client, request *pb.PaymentRequest) (*pb.PaymentResponse, error) {
+func (wp *RinhaWorkerPool) processPayment(client *http.Client, request *pb.PaymentRequest) (*pb.PaymentResponse, error) {
 	processor := wp.selectBestProcessor()
 
 	paymentReq := PaymentProcessorRequest{
@@ -188,7 +188,7 @@ func (wp *WorkerPool) processPayment(client *http.Client, request *pb.PaymentReq
 	}, nil
 }
 
-func (wp *WorkerPool) tryFallbackProcessor(client *http.Client, request *pb.PaymentRequest) (*pb.PaymentResponse, error) {
+func (wp *RinhaWorkerPool) tryFallbackProcessor(client *http.Client, request *pb.PaymentRequest) (*pb.PaymentResponse, error) {
 	fallbackProcessor := PaymentProcessor{Name: "fallback", URL: "http://payment-processor-fallback:8080"}
 
 	paymentReq := PaymentProcessorRequest{
@@ -224,7 +224,7 @@ func (wp *WorkerPool) tryFallbackProcessor(client *http.Client, request *pb.Paym
 	}, nil
 }
 
-func (wp *WorkerPool) selectBestProcessor() PaymentProcessor {
+func (wp *RinhaWorkerPool) selectBestProcessor() PaymentProcessor {
 	wp.healthMutex.RLock()
 	defer wp.healthMutex.RUnlock()
 
@@ -237,7 +237,7 @@ func (wp *WorkerPool) selectBestProcessor() PaymentProcessor {
 	return wp.processors[0]
 }
 
-func (wp *WorkerPool) healthCheckRoutine() {
+func (wp *RinhaWorkerPool) healthCheckRoutine() {
 	ticker := time.NewTicker(6 * time.Second)
 	defer ticker.Stop()
 
@@ -257,7 +257,7 @@ func (wp *WorkerPool) healthCheckRoutine() {
 	}
 }
 
-func (wp *WorkerPool) checkProcessorHealth(client *http.Client, processor PaymentProcessor) {
+func (wp *RinhaWorkerPool) checkProcessorHealth(client *http.Client, processor PaymentProcessor) {
 	wp.healthMutex.Lock()
 	lastCheck, exists := wp.lastHealthCheck[processor.Name]
 	if exists && time.Since(lastCheck) < 5*time.Second {
@@ -294,7 +294,7 @@ func (wp *WorkerPool) checkProcessorHealth(client *http.Client, processor Paymen
 		processor.Name, health.Failing, health.MinResponseTime)
 }
 
-func (wp *WorkerPool) storePaymentData(processorName string, amount float64, correlationId string) error {
+func (wp *RinhaWorkerPool) storePaymentData(processorName string, amount float64, correlationId string) error {
 	ctx := context.Background()
 	pipe := wp.redisClient.TxPipeline()
 	now := time.Now().UTC()
@@ -331,7 +331,7 @@ func (wp *WorkerPool) storePaymentData(processorName string, amount float64, cor
 	return nil
 }
 
-func (wp *WorkerPool) startNATSConsumer() {
+func (wp *RinhaWorkerPool) startNATSConsumer() {
 	_, err := wp.natsConn.Subscribe("payments.requests", func(msg *nats.Msg) {
 		var request pb.PaymentRequest
 		if err := json.Unmarshal(msg.Data, &request); err != nil {
@@ -369,7 +369,7 @@ func (e *PaymentError) Error() string {
 	return e.Message
 }
 
-func (wp *WorkerPool) SubmitJob(ctx context.Context, request *pb.PaymentRequest) (*pb.PaymentResponse, error) {
+func (wp *RinhaWorkerPool) SubmitJob(ctx context.Context, request *pb.PaymentRequest) (*pb.PaymentResponse, error) {
 	responseCh := make(chan *pb.PaymentResponse, 1)
 	errorCh := make(chan error, 1)
 
@@ -399,7 +399,7 @@ func (wp *WorkerPool) SubmitJob(ctx context.Context, request *pb.PaymentRequest)
 	}
 }
 
-func (wp *WorkerPool) GetPaymentsSummary(from, to string) (*pb.PaymentsSummaryResponse, error) {
+func (wp *RinhaWorkerPool) GetPaymentsSummary(from, to string) (*pb.PaymentsSummaryResponse, error) {
 	ctx := context.Background()
 
 	response := &pb.PaymentsSummaryResponse{
@@ -494,7 +494,7 @@ func (wp *WorkerPool) GetPaymentsSummary(from, to string) (*pb.PaymentsSummaryRe
 	return response, nil
 }
 
-func (wp *WorkerPool) CheckCorrelationIdExists(ctx context.Context, correlationId string) (bool, error) {
+func (wp *RinhaWorkerPool) CheckCorrelationIdExists(ctx context.Context, correlationId string) (bool, error) {
 	recordKey := fmt.Sprintf("payment:%s", correlationId)
 	exists, err := wp.redisClient.Exists(ctx, recordKey).Result()
 	if err != nil {
@@ -513,19 +513,19 @@ func (wp *WorkerPool) CheckCorrelationIdExists(ctx context.Context, correlationI
 	return inProgress > 0, nil
 }
 
-func (wp *WorkerPool) markPaymentInProgress(correlationId string) error {
+func (wp *RinhaWorkerPool) markPaymentInProgress(correlationId string) error {
 	ctx := context.Background()
 	progressKey := fmt.Sprintf("payment:progress:%s", correlationId)
 	return wp.redisClient.SetNX(ctx, progressKey, time.Now().Unix(), 5*time.Minute).Err()
 }
 
-func (wp *WorkerPool) cleanupInProgressMarker(correlationId string) {
+func (wp *RinhaWorkerPool) cleanupInProgressMarker(correlationId string) {
 	ctx := context.Background()
 	progressKey := fmt.Sprintf("payment:progress:%s", correlationId)
 	wp.redisClient.Del(ctx, progressKey)
 }
 
-func (wp *WorkerPool) startMaintenanceRoutines() {
+func (wp *RinhaWorkerPool) startMaintenanceRoutines() {
 	validationTicker := time.NewTicker(5 * time.Minute)
 	defer validationTicker.Stop()
 
