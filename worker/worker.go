@@ -82,6 +82,10 @@ func (wp *WorkerPool) Start() {
 		wp.wg.Add(1)
 		go wp.worker(i)
 	}
+
+	go wp.healthCheckRoutine()
+	go wp.startNATSConsumer()
+	go wp.startMaintenanceRoutines()
 }
 
 func (wp *WorkerPool) Stop() {
