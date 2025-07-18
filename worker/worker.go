@@ -203,6 +203,74 @@ func (wp *WorkerPool) checkProcessorHealth(client *http.Client, processor Paymen
 	log.Printf("Health check for %s: failing=%t, minResponseTime=%dms",
 		processor.Name, health.Failing, health.MinResponseTime)
 }
+
+func (wp *WorkerPool) storePaymentData(processorName string, amount float64, correlationId string) error {
+	ctx := context.Background()
+	pipe := wp.redisClient.TxPipeline()
+	now := time.Now().UTC()
+	paymentRecord := map[string]any{
+		"correlationId": correlationId,
+		"amount":        amount,
+		"processor":     processorName,
+		"processedAt":   now.Format(time.RFC3339),
+		"timestamp":     now.Unix(),
+	}
+
+	recordKey := fmt.Sprintf("payment:%s", correlationId)
+	paymentJSON, err := json.Marshal(paymentRecord)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payment record: %v", err)
+	}
+
+	pipe.Set(ctx, recordKey, paymentJSON, 0)
+	listKey := fmt.Sprintf("payments:list:%s", processorName)
+	pipe.ZAdd(ctx, listKey, &redis.Z{
+		Score:  float64(now.Unix()),
+		Member: correlationId,
+	})
+
+	countKey := fmt.Sprintf("payments:%s:count", processorName)
+	pipe.Incr(ctx, countKey)
+	amountKey := fmt.Sprintf("payments:%s:amount", processorName)
+	pipe.IncrByFloat(ctx, amountKey, amount)
+
+	_, err = pipe.Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to execute payment storage transaction: %v", err)
+	}
+	return nil
+}
+
+func (wp *WorkerPool) startNATSConsumer() {
+	_, err := wp.natsConn.Subscribe("payments.requests", func(msg *nats.Msg) {
+		var request pb.PaymentRequest
+		if err := json.Unmarshal(msg.Data, &request); err != nil {
+			log.Printf("Failed to unmarshal NATS message: %v", err)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		response, err := wp.SubmitJob(ctx, &request)
+		if err != nil {
+			log.Printf("Failed to process payment from NATS: %v", err)
+			return
+		}
+		responseData, err := json.Marshal(response)
+		if err != nil {
+			log.Printf("Failed to marshal response: %v", err)
+			return
+		}
+
+		replySubject := fmt.Sprintf("payments.responses.%s", request.CorrelationId)
+		wp.natsConn.Publish(replySubject, responseData)
+	})
+	if err != nil {
+		log.Printf("Failed to subscribe to NATS: %v", err)
+	}
+}
+
 type PaymentError struct {
 	Message string
 }
