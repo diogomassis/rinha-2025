@@ -13,18 +13,18 @@ import (
 
 type RinhaServer struct {
 	pb.PaymentServiceServer
-	client *cache.RinhaRedisClient
+	redisQueue *cache.RinhaRedisQueueService
 }
 
-func NewRinhaServer(client *cache.RinhaRedisClient) *RinhaServer {
+func NewRinhaServer(redisQueue *cache.RinhaRedisQueueService) *RinhaServer {
 	return &RinhaServer{
-		client: client,
+		redisQueue: redisQueue,
 	}
 }
 
 func (s *RinhaServer) Payments(ctx context.Context, in *pb.PaymentRequest) (*pb.PaymentResponse, error) {
 	pendingPayment := models.NewRinhaPendingPayment(in.CorrelationId, in.Amount)
-	err := s.client.AddToQueue(ctx, env.Env.InstanceName, *pendingPayment)
+	err := s.redisQueue.AddToQueue(ctx, env.Env.InstanceName, *pendingPayment)
 	if err != nil {
 		log.Printf("[server][error] unable to queue payment (correlation_id=%s, amount=%.2f): %v", in.CorrelationId, in.Amount, err)
 		return &pb.PaymentResponse{

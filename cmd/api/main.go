@@ -17,6 +17,7 @@ import (
 	"github.com/diogomassis/rinha-2025/internal/services/cache"
 	"github.com/diogomassis/rinha-2025/internal/services/worker"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
@@ -30,20 +31,32 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	redisClient := cache.NewRinhaRedisClient()
-	if err := redisClient.Ping(ctx); err != nil {
+	redisConn := redis.NewClient(&redis.Options{
+		Addr:         env.Env.RedisAddr,
+		Password:     "",
+		DB:           0,
+		PoolSize:     100,
+		MinIdleConns: 10,
+		DialTimeout:  5 * time.Second,
+		ReadTimeout:  3 * time.Second,
+		WriteTimeout: 3 * time.Second,
+		PoolTimeout:  4 * time.Second,
+	})
+	if err := redisConn.Ping(ctx); err != nil {
 		log.Fatalf("[main] Redis ping failed: %v", err)
 	}
 	log.Printf("[main] Redis connected successfully")
 
+	redisQueue := cache.NewRinhaRedisQueueService(redisConn)
+
 	numWorkers := 50
-	workerPool := worker.NewRinhaWorker(numWorkers, redisClient, worker.ExampleLoggingJob)
+	workerPool := worker.NewRinhaWorker(numWorkers, redisQueue, worker.ExampleLoggingJob)
 	go workerPool.Start()
 
 	var wg sync.WaitGroup
 
 	grpcServer := grpc.NewServer()
-	pb.RegisterPaymentServiceServer(grpcServer, server.NewRinhaServer(redisClient))
+	pb.RegisterPaymentServiceServer(grpcServer, server.NewRinhaServer(redisQueue))
 	reflection.Register(grpcServer)
 
 	wg.Add(1)
@@ -80,6 +93,7 @@ func main() {
 	log.Println("[main] Shutdown signal received. Gracefully shutting down...")
 
 	workerPool.Stop()
+	redisConn.Close()
 	grpcServer.GracefulStop()
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)

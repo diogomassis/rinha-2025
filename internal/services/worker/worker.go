@@ -15,18 +15,18 @@ type RinhaWorker struct {
 	numWorkers int
 	queueName  string
 	jobFunc    RinhaJobFunc
-	client     *cache.RinhaRedisClient
+	redisQueue *cache.RinhaRedisQueueService
 
 	waitGroup  *sync.WaitGroup
 	cancelFunc context.CancelFunc
 }
 
-func NewRinhaWorker(numWorkers int, client *cache.RinhaRedisClient, jobFunc RinhaJobFunc) *RinhaWorker {
+func NewRinhaWorker(numWorkers int, redisQueue *cache.RinhaRedisQueueService, jobFunc RinhaJobFunc) *RinhaWorker {
 	return &RinhaWorker{
 		numWorkers: numWorkers,
 		queueName:  env.Env.InstanceName,
 		jobFunc:    jobFunc,
-		client:     client,
+		redisQueue: redisQueue,
 		waitGroup:  &sync.WaitGroup{},
 	}
 }
@@ -53,7 +53,7 @@ func (rw *RinhaWorker) worker(ctx context.Context, id int) {
 			log.Printf("[worker] Worker #%d received shutdown signal, exiting...", id)
 			return
 		default:
-			data, err := rw.client.PopFromQueue(ctx, rw.queueName)
+			data, err := rw.redisQueue.PopFromQueue(ctx, rw.queueName)
 			if err != nil {
 				if errors.Is(err, context.Canceled) || errors.Is(err, redis.Nil) {
 					continue
