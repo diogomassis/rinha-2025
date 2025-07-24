@@ -61,7 +61,7 @@ func (rw *RinhaWorker) worker(ctx context.Context, id int) {
 				log.Printf("[worker] Error in worker #%d while popping from queue: %v", id, err)
 				continue
 			}
-			if err := rw.jobFunc(ctx, data); err != nil {
+			if err := rw.jobFunc(ctx, *data); err != nil {
 				log.Printf("[worker] Error in jobFunc in worker #%d: %v", id, err)
 			}
 		}
