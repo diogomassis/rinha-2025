@@ -43,7 +43,7 @@ func main() {
 	var wg sync.WaitGroup
 
 	grpcServer := grpc.NewServer()
-	pb.RegisterPaymentServiceServer(grpcServer, server.NewRinhaServer())
+	pb.RegisterPaymentServiceServer(grpcServer, server.NewRinhaServer(redisClient))
 	reflection.Register(grpcServer)
 
 	wg.Add(1)
