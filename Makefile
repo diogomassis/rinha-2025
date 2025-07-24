@@ -32,6 +32,7 @@ else
 	RM_F_CMD = rm -f
 	RM_RF_CMD = ${RM_F_CMD} -r
 	SERVER_BIN = ${SERVER_DIR}
+	DOCKER_COMPOSE_CMD = $(shell if command -v docker-compose >/dev/null 2>&1; then echo "docker-compose"; elif docker compose version >/dev/null 2>&1; then echo "docker compose"; else echo "docker-compose"; fi)
 endif
 
 .DEFAULT_GOAL := help
@@ -89,6 +90,15 @@ rebuild: clean all
 
 bump: all
 	go get -u ./...
+
+build-image:
+	docker build -t rinha-2025 .
+
+start-containers:
+	${DOCKER_COMPOSE_CMD} down -v && ${DOCKER_COMPOSE_CMD} up -d
+
+open-backend-logs:
+	${DOCKER_COMPOSE_CMD} logs -f backend-1 backend-2
 
 about:
 	@echo "OS: ${OS}"
