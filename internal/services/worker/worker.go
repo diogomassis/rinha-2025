@@ -23,12 +23,12 @@ type RinhaWorker struct {
 	cancelFunc context.CancelFunc
 }
 
-func NewRinhaWorker(numWorkers int, jobFunc RinhaJobFunc) *RinhaWorker {
+func NewRinhaWorker(numWorkers int, client *cache.RinhaRedisClient, jobFunc RinhaJobFunc) *RinhaWorker {
 	return &RinhaWorker{
 		numWorkers: numWorkers,
 		queueName:  env.Env.InstanceName,
 		jobFunc:    jobFunc,
-		client:     cache.NewRinhaRedisClient(),
+		client:     client,
 		waitGroup:  &sync.WaitGroup{},
 	}
 }
