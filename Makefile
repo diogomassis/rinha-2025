@@ -103,6 +103,7 @@ open-backend-logs:
 about:
 	@echo "OS: ${OS}"
 	@echo "Shell: ${SHELL} ${SHELL_VERSION}"
+	@echo "Docker Compose: ${DOCKER_COMPOSE_CMD}"
 	@echo "Protoc version: $(shell protoc --version)"
 	@echo "Go version: $(shell go version)"
 	@echo "Go package: ${PACKAGE}"
