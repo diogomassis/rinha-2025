@@ -11,8 +11,6 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-type RinhaJobFunc func(ctx context.Context, data []byte) error
-
 type RinhaWorker struct {
 	numWorkers int
 	queueName  string
@@ -68,4 +66,15 @@ func (rw *RinhaWorker) worker(ctx context.Context, id int) {
 			}
 		}
 	}
+}
+
+func (rw *RinhaWorker) Stop() {
+	log.Println("[worker] Shutting down the worker pool...")
+
+	if rw.cancelFunc != nil {
+		rw.cancelFunc()
+	}
+
+	rw.waitGroup.Wait()
+	log.Println("[worker] All workers have been safely shut down.")
 }
