@@ -1,12 +1,12 @@
 package models
 
-type PaymentEntity struct {
+type RinhaPendingPayment struct {
 	CorrelationId string  `json:"correlationId"`
 	Amount        float64 `json:"amount"`
 }
 
-func NewPaymentEntity(correlationId string, amount float64) *PaymentEntity {
-	return &PaymentEntity{
+func NewRinhaPendingPayment(correlationId string, amount float64) *RinhaPendingPayment {
+	return &RinhaPendingPayment{
 		CorrelationId: correlationId,
 		Amount:        amount,
 	}
