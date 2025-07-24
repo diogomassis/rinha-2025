@@ -9,9 +9,9 @@ import (
 )
 
 type PaymentProcessor interface {
-	ProcessPayment(request *PaymentRequest) (*PaymentResponse, error)
-	GetName() string
 	GetURL() string
+	GetName() string
+	ProcessPayment(request *PaymentRequest) (*PaymentResponse, error)
 }
 
 type PaymentRequest struct {
@@ -51,12 +51,12 @@ func NewHTTPPaymentProcessor(name, url string) *HTTPPaymentProcessor {
 	}
 }
 
-func (p *HTTPPaymentProcessor) GetName() string {
-	return p.name
-}
-
 func (p *HTTPPaymentProcessor) GetURL() string {
 	return p.url
+}
+
+func (p *HTTPPaymentProcessor) GetName() string {
+	return p.name
 }
 
 func (p *HTTPPaymentProcessor) ProcessPayment(request *PaymentRequest) (*PaymentResponse, error) {
