@@ -69,9 +69,9 @@ func (r *RinhaRedisClient) PopFromQueue(ctx context.Context, queueName string) (
 		return nil, fmt.Errorf("[cache] unexpected BRPop result: %v", result)
 	}
 
-	var pendingPayment *models.RinhaPendingPayment
-	if err := json.Unmarshal([]byte(result[1]), pendingPayment); err != nil {
+	var pendingPayment models.RinhaPendingPayment
+	if err := json.Unmarshal([]byte(result[1]), &pendingPayment); err != nil {
 		return nil, fmt.Errorf("[cache] failed to unmarshal pending payment: %w", err)
 	}
-	return pendingPayment, nil
+	return &pendingPayment, nil
 }
