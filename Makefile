@@ -14,6 +14,7 @@ ifeq ($(OS), Windows_NT)
 	RM_F_CMD = Remove-Item -erroraction silentlycontinue -Force
 	RM_RF_CMD = ${RM_F_CMD} -Recurse
 	SERVER_BIN = ${SERVER_DIR}.exe
+	DOCKER_COMPOSE_CMD = $(shell if (Get-Command docker-compose -ErrorAction SilentlyContinue) { "docker-compose" } elseif (docker compose version 2>$$null) { "docker compose" } else { "docker-compose" })
 else
 	SHELL := bash
 	SHELL_VERSION = $(shell echo $$BASH_VERSION)
