@@ -6,10 +6,9 @@ import (
 )
 
 type EnvironmentVariables struct {
-	InstanceName            string
+	Port                    string
 	RedisAddr               string
-	GrpcAddr                string
-	BackendPort             string
+	InstanceName            string
 	PaymentDefaultEndpoint  string
 	PaymentFallbackEndpoint string
 }
@@ -20,10 +19,9 @@ var (
 
 func Load() {
 	Env = &EnvironmentVariables{
-		InstanceName:            getRequiredEnv("INSTANCE_NAME"),
+		Port:                    getRequiredEnv("PORT"),
 		RedisAddr:               getRequiredEnv("REDIS_ADDR"),
-		GrpcAddr:                getRequiredEnv("GRPC_ADDR"),
-		BackendPort:             getRequiredEnv("BACKEND_PORT"),
+		InstanceName:            getRequiredEnv("INSTANCE_NAME"),
 		PaymentDefaultEndpoint:  getRequiredEnv("PAYMENT_DEFAULT_ENDPOINT"),
 		PaymentFallbackEndpoint: getRequiredEnv("PAYMENT_FALLBACK_ENDPOINT"),
 	}
@@ -31,8 +29,7 @@ func Load() {
 	log.Printf("[ENV] Environment variables loaded successfully:")
 	log.Printf("  - Instance: %s", Env.InstanceName)
 	log.Printf("  - Redis: %s", Env.RedisAddr)
-	log.Printf("  - gRPC: %s", Env.GrpcAddr)
-	log.Printf("  - Backend Port: %s", Env.BackendPort)
+	log.Printf("  - Backend Port: %s", Env.Port)
 	log.Printf("  - Default Processor: %s", Env.PaymentDefaultEndpoint)
 	log.Printf("  - Fallback Processor: %s", Env.PaymentFallbackEndpoint)
 }

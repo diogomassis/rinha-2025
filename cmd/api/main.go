@@ -18,17 +18,19 @@ import (
 	"google.golang.org/grpc/reflection"
 )
 
+var addr string = "0.0.0.0:3030"
+
 func main() {
 	env.Load()
 
 	ctx := context.Background()
 	server := server.NewRinhaServer()
 	go func() {
-		lis, err := net.Listen("tcp", env.Env.GrpcAddr)
+		lis, err := net.Listen("tcp", addr)
 		if err != nil {
 			panic(err)
 		}
-		log.Printf("gRPC server listening at %s", env.Env.GrpcAddr)
+		log.Printf("gRPC server listening at %s", addr)
 
 		s := grpc.NewServer()
 		pb.RegisterPaymentServiceServer(s, server)
@@ -40,11 +42,11 @@ func main() {
 
 	mux := runtime.NewServeMux()
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
-	err := pb.RegisterPaymentServiceHandlerFromEndpoint(ctx, mux, env.Env.GrpcAddr, opts)
+	err := pb.RegisterPaymentServiceHandlerFromEndpoint(ctx, mux, addr, opts)
 	if err != nil {
 		panic(err)
 	}
-	port := ":" + env.Env.BackendPort
+	port := ":" + env.Env.Port
 
 	log.Printf("[%s] HTTP gateway listening at %s", env.Env.InstanceName, port)
 	log.Printf("HTTP routes available:")

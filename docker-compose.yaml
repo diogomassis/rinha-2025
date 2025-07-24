@@ -19,9 +19,8 @@ services:
   backend-1:
     image: rinha-2025
     environment:
+      - PORT=8080
       - INSTANCE_NAME=backend-1
-      - BACKEND_PORT=8080
-      - GRPC_ADDR=0.0.0.0:3030
       - REDIS_ADDR=redis-server:6379
       - PAYMENT_DEFAULT_ENDPOINT=http://payment-processor-default:8080
       - PAYMENT_FALLBACK_ENDPOINT=http://payment-processor-fallback:8080
@@ -41,9 +40,8 @@ services:
   backend-2:
     image: rinha-2025
     environment:
+      - PORT=8080
       - INSTANCE_NAME=backend-2
-      - BACKEND_PORT=8080
-      - GRPC_ADDR=0.0.0.0:3030
       - REDIS_ADDR=redis-server:6379
       - PAYMENT_DEFAULT_ENDPOINT=http://payment-processor-default:8080
       - PAYMENT_FALLBACK_ENDPOINT=http://payment-processor-fallback:8080
