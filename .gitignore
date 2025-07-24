@@ -1,0 +1,5 @@
+# Ignore all files with the .notes in any directory.
+*.notes
+
+# Ignore all files and directories inside the .rinha/ folder
+.rinha/
