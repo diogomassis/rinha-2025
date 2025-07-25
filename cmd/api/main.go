@@ -51,7 +51,7 @@ func main() {
 	redisPersistence := cache.NewRinhaRedisPersistenceService(redisConn)
 
 	numWorkers := 50
-	workerPool := worker.NewRinhaWorker(numWorkers, worker.ExampleLoggingJob, redisQueue, redisPersistence)
+	workerPool := worker.NewRinhaWorker(numWorkers, redisQueue, redisPersistence)
 	go workerPool.Start()
 
 	var wg sync.WaitGroup
