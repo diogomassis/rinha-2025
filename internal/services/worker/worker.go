@@ -12,22 +12,24 @@ import (
 )
 
 type RinhaWorker struct {
-	numWorkers int
-	queueName  string
-	jobFunc    RinhaJobFunc
-	redisQueue *cache.RinhaRedisQueueService
+	numWorkers       int
+	queueName        string
+	jobFunc          RinhaJobFunc
+	redisQueue       *cache.RinhaRedisQueueService
+	redisPersistence *cache.RinhaRedisPersistenceService
 
 	waitGroup  *sync.WaitGroup
 	cancelFunc context.CancelFunc
 }
 
-func NewRinhaWorker(numWorkers int, redisQueue *cache.RinhaRedisQueueService, jobFunc RinhaJobFunc) *RinhaWorker {
+func NewRinhaWorker(numWorkers int, jobFunc RinhaJobFunc, redisQueue *cache.RinhaRedisQueueService, redisPersistence *cache.RinhaRedisPersistenceService) *RinhaWorker {
 	return &RinhaWorker{
-		numWorkers: numWorkers,
-		queueName:  env.Env.InstanceName,
-		jobFunc:    jobFunc,
-		redisQueue: redisQueue,
-		waitGroup:  &sync.WaitGroup{},
+		numWorkers:       numWorkers,
+		queueName:        env.Env.InstanceName,
+		jobFunc:          jobFunc,
+		redisQueue:       redisQueue,
+		redisPersistence: redisPersistence,
+		waitGroup:        &sync.WaitGroup{},
 	}
 }
 
