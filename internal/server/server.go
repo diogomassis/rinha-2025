@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/diogomassis/rinha-2025/internal/env"
@@ -51,24 +50,15 @@ func (s *RinhaServer) PaymentsSummary(ctx context.Context, in *pb.PaymentsSummar
 	var err error
 
 	if in.From != "" {
-		fromStr := in.From
-		if !strings.HasSuffix(fromStr, "Z") {
-			fromStr += "Z"
-		}
-		from, err = time.Parse(time.RFC3339Nano, fromStr)
+		from, err = time.Parse(time.UTC.String(), in.From)
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, "invalid 'from' date format")
+			return nil, status.Error(codes.InvalidArgument, "invalid 'from' date format - must be ISO UTC format ending with Z")
 		}
 	}
 	if in.To != "" {
-		toStr := in.To
-		if !strings.HasSuffix(toStr, "Z") {
-			toStr += "Z"
-		}
-		to, err = time.Parse(time.RFC3339Nano, toStr)
-
+		to, err = time.Parse(time.UTC.String(), in.To)
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, "invalid 'to' date format")
+			return nil, status.Error(codes.InvalidArgument, "invalid 'to' date format - must be ISO UTC format ending with Z")
 		}
 	}
 
