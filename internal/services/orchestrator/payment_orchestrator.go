@@ -33,7 +33,7 @@ func (o *RinhaPaymentOrchestrator) ExecutePayment(ctx context.Context, payment m
 	candidates := make([]candidateProcessor, 0, len(o.processors))
 	for _, p := range o.processors {
 		status, found := o.healthMonitor.GetStatus(p.GetName())
-		if found && !status.Failing && status.MinResponseTime > 0 {
+		if found && !status.Failing {
 			candidates = append(candidates, candidateProcessor{processor: p, health: status})
 		} else {
 			log.Printf("[orchestrator] Skipping processor %s due to unhealthy status (Found: %t, Status: %+v)", p.GetName(), found, status)

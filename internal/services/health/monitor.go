@@ -1,7 +1,6 @@
 package health
 
 import (
-	"context"
 	"log"
 	"sync"
 	"time"
@@ -33,7 +32,7 @@ func (m *RinhaMonitor) GetStatus(processorName string) (processor.HealthStatus, 
 
 func (m *RinhaMonitor) Start() {
 	log.Println("[health] Starting health monitor...")
-	ticker := time.NewTicker(6 * time.Second)
+	ticker := time.NewTicker(5 * time.Second)
 	go func() {
 		m.checkAllProcessors()
 		for {
@@ -51,11 +50,9 @@ func (m *RinhaMonitor) Start() {
 
 func (m *RinhaMonitor) checkAllProcessors() {
 	log.Println("[health] Running periodic health checks...")
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
-	defer cancel()
 
 	for _, p := range m.processors {
-		status, err := p.CheckHealth(ctx)
+		status, err := p.CheckHealth()
 		if err != nil {
 			log.Printf("[health] ERROR checking health for %s: %v. Marking as failing.", p.GetName(), err)
 			m.updateStatus(p.GetName(), processor.HealthStatus{Failing: true})
