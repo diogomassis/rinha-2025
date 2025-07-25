@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/diogomassis/rinha-2025/internal/env"
+	"github.com/diogomassis/rinha-2025/internal/models"
 	"github.com/diogomassis/rinha-2025/internal/services/cache"
 	"github.com/redis/go-redis/v9"
 )
@@ -14,7 +15,6 @@ import (
 type RinhaWorker struct {
 	numWorkers       int
 	queueName        string
-	jobFunc          RinhaJobFunc
 	redisQueue       *cache.RinhaRedisQueueService
 	redisPersistence *cache.RinhaRedisPersistenceService
 
@@ -22,11 +22,10 @@ type RinhaWorker struct {
 	cancelFunc context.CancelFunc
 }
 
-func NewRinhaWorker(numWorkers int, jobFunc RinhaJobFunc, redisQueue *cache.RinhaRedisQueueService, redisPersistence *cache.RinhaRedisPersistenceService) *RinhaWorker {
+func NewRinhaWorker(numWorkers int, redisQueue *cache.RinhaRedisQueueService, redisPersistence *cache.RinhaRedisPersistenceService) *RinhaWorker {
 	return &RinhaWorker{
 		numWorkers:       numWorkers,
 		queueName:        env.Env.InstanceName,
-		jobFunc:          jobFunc,
 		redisQueue:       redisQueue,
 		redisPersistence: redisPersistence,
 		waitGroup:        &sync.WaitGroup{},
@@ -63,11 +62,16 @@ func (rw *RinhaWorker) worker(ctx context.Context, id int) {
 				log.Printf("[worker] Error in worker #%d while popping from queue: %v", id, err)
 				continue
 			}
-			if err := rw.jobFunc(ctx, *data); err != nil {
+			if err := rw.processPayment(ctx, *data); err != nil {
 				log.Printf("[worker] Error in jobFunc in worker #%d: %v", id, err)
 			}
 		}
 	}
+}
+
+func (rw *RinhaWorker) processPayment(ctx context.Context, data models.RinhaPendingPayment) error {
+	log.Printf("[worker] received pending payment with Correlation Id: %s", data.CorrelationId)
+	return nil
 }
 
 func (rw *RinhaWorker) Stop() {
