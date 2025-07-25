@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -23,7 +24,7 @@ func NewRinhaRedisPersistenceService(client *redis.Client) *RinhaRedisPersistenc
 
 func (r *RinhaRedisPersistenceService) Add(ctx context.Context, p models.CompletedPayment) error {
 	key := fmt.Sprintf("payments:series:%s", p.Type)
-	timestamp := p.ProcessedAt.UnixNano()
+	timestamp := p.ProcessedAt.UnixMilli()
 	member := fmt.Sprintf("%s:%.2f", p.CorrelationID, p.Amount)
 
 	_, err := r.client.ZAdd(ctx, key, redis.Z{
@@ -54,10 +55,10 @@ func (r *RinhaRedisPersistenceService) getSummaryForType(ctx context.Context, pa
 	min := "-inf"
 	max := "+inf"
 	if !from.IsZero() {
-		min = strconv.FormatInt(from.UnixNano(), 10)
+		min = strconv.FormatInt(from.UnixMilli(), 10)
 	}
 	if !to.IsZero() {
-		max = strconv.FormatInt(to.UnixNano(), 10)
+		max = strconv.FormatInt(to.UnixMilli(), 10)
 	}
 
 	members, err := r.client.ZRangeByScore(ctx, key, &redis.ZRangeBy{
@@ -75,7 +76,11 @@ func (r *RinhaRedisPersistenceService) getSummaryForType(ctx context.Context, pa
 		if len(parts) < 2 {
 			continue
 		}
-		amount, _ := strconv.ParseFloat(parts[len(parts)-1], 64)
+		amount, err := strconv.ParseFloat(parts[len(parts)-1], 64)
+		if err != nil {
+			log.Printf("[persistence] ERROR: Could not parse amount from member '%s'. Error: %v", member, err)
+			continue
+		}
 		totalAmount += amount
 	}
 	return models.PaymentSummaryItem{
