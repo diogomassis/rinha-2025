@@ -58,7 +58,8 @@ func (p *HTTPPaymentProcessor) ProcessPayment(ctx context.Context, payment *mode
 		return fmt.Errorf("failed to marshal payment request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.url, bytes.NewBuffer(jsonData))
+	paymentURL := fmt.Sprintf("%s/payments", p.url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, paymentURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to create request for %s: %w", p.name, err)
 	}

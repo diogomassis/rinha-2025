@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/diogomassis/rinha-2025/internal/env"
@@ -50,13 +51,22 @@ func (s *RinhaServer) PaymentsSummary(ctx context.Context, in *pb.PaymentsSummar
 	var err error
 
 	if in.From != "" {
-		from, err = time.Parse(time.RFC3339Nano, in.From)
+		fromStr := in.From
+		if !strings.HasSuffix(fromStr, "Z") {
+			fromStr += "Z"
+		}
+		from, err = time.Parse(time.RFC3339Nano, fromStr)
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, "invalid 'from' date format")
 		}
 	}
 	if in.To != "" {
-		to, err = time.Parse(time.RFC3339Nano, in.To)
+		toStr := in.To
+		if !strings.HasSuffix(toStr, "Z") {
+			toStr += "Z"
+		}
+		to, err = time.Parse(time.RFC3339Nano, toStr)
+
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, "invalid 'to' date format")
 		}
@@ -64,7 +74,7 @@ func (s *RinhaServer) PaymentsSummary(ctx context.Context, in *pb.PaymentsSummar
 
 	summary, err := s.redisPersistence.Get(ctx, from, to)
 	if err != nil {
-		return nil, status.Error(codes.Internal, "failed to fetch payment summary")
+		return nil, status.Error(codes.Internal, "failed to fetch payments summary")
 	}
 
 	return &pb.PaymentsSummaryResponse{

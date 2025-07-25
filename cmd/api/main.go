@@ -46,10 +46,11 @@ func main() {
 		WriteTimeout: 3 * time.Second,
 		PoolTimeout:  4 * time.Second,
 	})
-	if err := redisConn.Ping(ctx); err != nil {
+	if pong, err := redisConn.Ping(ctx).Result(); err != nil {
 		log.Fatalf("[main] Redis ping failed: %v", err)
+	} else {
+		log.Printf("[main] Redis connected successfully: %s", pong)
 	}
-	log.Printf("[main] Redis connected successfully")
 
 	redisQueue := cache.NewRinhaRedisQueueService(redisConn)
 	redisPersistence := cache.NewRinhaRedisPersistenceService(redisConn)
