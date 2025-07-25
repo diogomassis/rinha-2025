@@ -13,21 +13,21 @@ const (
 	DELAYED_QUEUE_KEY = "payments:queue:delayed"
 )
 
-type Requeuer struct {
+type RinhaRequeuer struct {
 	redisClient   *redis.Client
 	mainQueueName string
 	stopChan      chan struct{}
 }
 
-func NewRequeuer(client *redis.Client, mainQueueName string) *Requeuer {
-	return &Requeuer{
+func NewRinhaRequeuer(client *redis.Client, mainQueueName string) *RinhaRequeuer {
+	return &RinhaRequeuer{
 		redisClient:   client,
 		mainQueueName: mainQueueName,
 		stopChan:      make(chan struct{}),
 	}
 }
 
-func (r *Requeuer) Start() {
+func (r *RinhaRequeuer) Start() {
 	log.Printf("[requeuer] Starting requeuer for delayed queue '%s'...", DELAYED_QUEUE_KEY)
 	ticker := time.NewTicker(5 * time.Second)
 
@@ -45,12 +45,12 @@ func (r *Requeuer) Start() {
 	}()
 }
 
-func (r *Requeuer) Stop() {
+func (r *RinhaRequeuer) Stop() {
 	log.Println("[requeuer] Shutting down the requeuer...")
 	close(r.stopChan)
 }
 
-func (r *Requeuer) processDelayedItems() {
+func (r *RinhaRequeuer) processDelayedItems() {
 	ctx := context.Background()
 	now := time.Now().Unix()
 	maxScore := fmt.Sprintf("%d", now)

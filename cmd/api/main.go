@@ -66,7 +66,7 @@ func main() {
 	workerPool := worker.NewRinhaWorker(numWorkers, redisQueue, redisPersistence, paymentOrchestrator)
 	go workerPool.Start()
 
-	requeuerService := requeuer.NewRequeuer(redisConn, env.Env.InstanceName)
+	requeuerService := requeuer.NewRinhaRequeuer(redisConn, env.Env.InstanceName)
 	go requeuerService.Start()
 
 	var wg sync.WaitGroup
