@@ -14,6 +14,7 @@ import (
 type PaymentProcessor interface {
 	GetName() string
 	ProcessPayment(ctx context.Context, payment *models.RinhaPendingPayment) error
+	CheckHealth(ctx context.Context) (*HealthStatus, error)
 }
 
 type PaymentRequest struct {
@@ -37,18 +38,12 @@ type HTTPPaymentProcessor struct {
 	client *http.Client
 }
 
-func NewHTTPPaymentProcessor(name, url string) *HTTPPaymentProcessor {
+func NewHTTPPaymentProcessor(name, url string, timeout time.Duration) *HTTPPaymentProcessor {
 	return &HTTPPaymentProcessor{
 		name: name,
 		url:  url,
 		client: &http.Client{
-			Timeout: 3 * time.Second,
-			Transport: &http.Transport{
-				MaxIdleConns:        10,
-				MaxIdleConnsPerHost: 10,
-				IdleConnTimeout:     30 * time.Second,
-				DisableKeepAlives:   false,
-			},
+			Timeout: timeout,
 		},
 	}
 }
@@ -82,4 +77,28 @@ func (p *HTTPPaymentProcessor) ProcessPayment(ctx context.Context, payment *mode
 		return fmt.Errorf("%w: received status code %d", ErrServiceUnavailable, resp.StatusCode)
 	}
 	return fmt.Errorf("%w: received status code %d", ErrPaymentDefinitive, resp.StatusCode)
+}
+
+func (p *HTTPPaymentProcessor) CheckHealth(ctx context.Context) (*HealthStatus, error) {
+	healthURL := fmt.Sprintf("%s/payments/service-health", p.url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create health check request: %w", err)
+	}
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("health check request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("health check returned non-200 status: %d", resp.StatusCode)
+	}
+
+	var status HealthStatus
+	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+		return nil, fmt.Errorf("failed to decode health check response: %w", err)
+	}
+	return &status, nil
 }
