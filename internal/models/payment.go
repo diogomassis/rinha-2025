@@ -5,6 +5,7 @@ import "time"
 type RinhaPendingPayment struct {
 	CorrelationId string  `json:"correlationId"`
 	Amount        float64 `json:"amount"`
+	RetryCount    int     `json:"retryCount"`
 }
 
 func NewRinhaPendingPayment(correlationId string, amount float64) *RinhaPendingPayment {
