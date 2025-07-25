@@ -4,21 +4,26 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/diogomassis/rinha-2025/internal/env"
 	"github.com/diogomassis/rinha-2025/internal/models"
 	pb "github.com/diogomassis/rinha-2025/internal/proto"
 	"github.com/diogomassis/rinha-2025/internal/services/cache"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type RinhaServer struct {
 	pb.PaymentServiceServer
-	redisQueue *cache.RinhaRedisQueueService
+	redisQueue       *cache.RinhaRedisQueueService
+	redisPersistence *cache.RinhaRedisPersistenceService
 }
 
-func NewRinhaServer(redisQueue *cache.RinhaRedisQueueService) *RinhaServer {
+func NewRinhaServer(redisQueue *cache.RinhaRedisQueueService, redisPersistence *cache.RinhaRedisPersistenceService) *RinhaServer {
 	return &RinhaServer{
-		redisQueue: redisQueue,
+		redisQueue:       redisQueue,
+		redisPersistence: redisPersistence,
 	}
 }
 
@@ -41,14 +46,35 @@ func (s *RinhaServer) Payments(ctx context.Context, in *pb.PaymentRequest) (*pb.
 }
 
 func (s *RinhaServer) PaymentsSummary(ctx context.Context, in *pb.PaymentsSummaryRequest) (*pb.PaymentsSummaryResponse, error) {
+	var from, to time.Time
+	var err error
+
+	if in.From != "" {
+		from, err = time.Parse(time.RFC3339Nano, in.From)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, "invalid 'from' date format")
+		}
+	}
+	if in.To != "" {
+		to, err = time.Parse(time.RFC3339Nano, in.To)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, "invalid 'to' date format")
+		}
+	}
+
+	summary, err := s.redisPersistence.Get(ctx, from, to)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to fetch payment summary")
+	}
+
 	return &pb.PaymentsSummaryResponse{
 		Default: &pb.ProcessorSummary{
-			TotalRequests: 0,
-			TotalAmount:   0,
+			TotalRequests: summary.Default.TotalRequests,
+			TotalAmount:   summary.Default.TotalAmount,
 		},
 		Fallback: &pb.ProcessorSummary{
-			TotalRequests: 0,
-			TotalAmount:   0,
+			TotalRequests: summary.Fallback.TotalRequests,
+			TotalAmount:   summary.Fallback.TotalAmount,
 		},
 	}, nil
 }

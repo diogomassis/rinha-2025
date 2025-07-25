@@ -48,15 +48,16 @@ func main() {
 	log.Printf("[main] Redis connected successfully")
 
 	redisQueue := cache.NewRinhaRedisQueueService(redisConn)
+	redisPersistence := cache.NewRinhaRedisPersistenceService(redisConn)
 
 	numWorkers := 50
-	workerPool := worker.NewRinhaWorker(numWorkers, redisQueue, worker.ExampleLoggingJob)
+	workerPool := worker.NewRinhaWorker(numWorkers, worker.ExampleLoggingJob, redisQueue, redisPersistence)
 	go workerPool.Start()
 
 	var wg sync.WaitGroup
 
 	grpcServer := grpc.NewServer()
-	pb.RegisterPaymentServiceServer(grpcServer, server.NewRinhaServer(redisQueue))
+	pb.RegisterPaymentServiceServer(grpcServer, server.NewRinhaServer(redisQueue, redisPersistence))
 	reflection.Register(grpcServer)
 
 	wg.Add(1)
