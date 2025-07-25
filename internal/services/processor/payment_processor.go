@@ -2,16 +2,18 @@ package processor
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/diogomassis/rinha-2025/internal/models"
 )
 
 type PaymentProcessor interface {
-	GetURL() string
 	GetName() string
-	ProcessPayment(request *PaymentRequest) (*PaymentResponse, error)
+	ProcessPayment(ctx context.Context, payment *models.RinhaPendingPayment) error
 }
 
 type PaymentRequest struct {
@@ -51,39 +53,33 @@ func NewHTTPPaymentProcessor(name, url string) *HTTPPaymentProcessor {
 	}
 }
 
-func (p *HTTPPaymentProcessor) GetURL() string {
-	return p.url
-}
-
 func (p *HTTPPaymentProcessor) GetName() string {
 	return p.name
 }
 
-func (p *HTTPPaymentProcessor) ProcessPayment(request *PaymentRequest) (*PaymentResponse, error) {
-	jsonData, err := json.Marshal(request)
+func (p *HTTPPaymentProcessor) ProcessPayment(ctx context.Context, payment *models.RinhaPendingPayment) error {
+	jsonData, err := json.Marshal(payment)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal payment request: %v", err)
+		return fmt.Errorf("failed to marshal payment request: %w", err)
 	}
-	url := fmt.Sprintf("%s/payments", p.url)
-	resp, err := p.client.Post(url, "application/json", bytes.NewBuffer(jsonData))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.url, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return nil, fmt.Errorf("payment processor request failed: %v", err)
+		return fmt.Errorf("failed to create request for %s: %w", p.name, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrServiceUnavailable, err)
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
 	if resp.StatusCode >= 500 {
-		return nil, fmt.Errorf("payment processor returned status %d", resp.StatusCode)
+		return fmt.Errorf("%w: received status code %d", ErrServiceUnavailable, resp.StatusCode)
 	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("payment processor returned status %d", resp.StatusCode)
-	}
-	var procResp PaymentProcessorResponse
-	if err := json.NewDecoder(resp.Body).Decode(&procResp); err != nil {
-		return nil, fmt.Errorf("failed to decode processor response: %v", err)
-	}
-
-	return &PaymentResponse{
-		Code:    int32(resp.StatusCode),
-		Message: procResp.Message,
-	}, nil
+	return fmt.Errorf("%w: received status code %d", ErrPaymentDefinitive, resp.StatusCode)
 }
