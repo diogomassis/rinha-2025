@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/diogomassis/rinha-2025/internal/models"
 	"github.com/redis/go-redis/v9"
@@ -46,4 +47,27 @@ func (r *RinhaRedisQueueService) PopFromQueue(ctx context.Context, queueName str
 		return nil, fmt.Errorf("[cache] failed to unmarshal pending payment: %w", err)
 	}
 	return &pendingPayment, nil
+}
+
+func (r *RinhaRedisQueueService) AddToDelayedQueue(ctx context.Context, queueName string, data models.RinhaPendingPayment, retryAt time.Time) error {
+	payload, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payment for delayed queue: %w", err)
+	}
+
+	_, err = r.client.ZAdd(ctx, queueName, redis.Z{
+		Score:  float64(retryAt.Unix()),
+		Member: string(payload),
+	}).Result()
+	return err
+}
+
+func (r *RinhaRedisQueueService) AddToDeadLetterQueue(ctx context.Context, queueName string, data models.RinhaPendingPayment) error {
+	payload, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payment for DLQ: %w", err)
+	}
+
+	_, err = r.client.LPush(ctx, queueName, string(payload)).Result()
+	return err
 }
