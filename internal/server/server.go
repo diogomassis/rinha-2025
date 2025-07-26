@@ -15,23 +15,21 @@ import (
 
 type RinhaServer struct {
 	pb.PaymentServiceServer
-	redisQueue       *cache.RinhaRedisQueueService
-	redisPersistence *cache.RinhaRedisPersistenceService
-	mainQueueChannel chan<- models.RinhaPendingPayment
+	redisPersistence   *cache.RinhaRedisPersistenceService
+	pendingPaymentChan chan<- models.RinhaPendingPayment
 }
 
-func NewRinhaServer(redisQueue *cache.RinhaRedisQueueService, redisPersistence *cache.RinhaRedisPersistenceService, mainQueueChannel chan<- models.RinhaPendingPayment) *RinhaServer {
+func NewRinhaServer(redisPersistence *cache.RinhaRedisPersistenceService, pendingPaymentChan chan<- models.RinhaPendingPayment) *RinhaServer {
 	return &RinhaServer{
-		redisQueue:       redisQueue,
-		redisPersistence: redisPersistence,
-		mainQueueChannel: mainQueueChannel,
+		redisPersistence:   redisPersistence,
+		pendingPaymentChan: pendingPaymentChan,
 	}
 }
 
 func (s *RinhaServer) Payments(ctx context.Context, in *pb.PaymentRequest) (*pb.PaymentResponse, error) {
 	pendingPayment := models.NewRinhaPendingPayment(in.CorrelationId, in.Amount)
 	select {
-	case s.mainQueueChannel <- *pendingPayment:
+	case s.pendingPaymentChan <- *pendingPayment:
 		return &pb.PaymentResponse{
 			Code:    http.StatusCreated,
 			Message: "payment queued for processing",

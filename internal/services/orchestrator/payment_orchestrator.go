@@ -10,6 +10,11 @@ import (
 	"github.com/diogomassis/rinha-2025/internal/services/processor"
 )
 
+var (
+	NoHealthyPaymentAvailable = errors.New("no healthy payment processors available")
+	AllHealthyPaymentFailed   = errors.New("all healthy and sorted payment processors failed")
+)
+
 type candidateProcessor struct {
 	processor processor.PaymentProcessor
 	health    processor.HealthStatus
@@ -35,9 +40,8 @@ func (o *RinhaPaymentOrchestrator) ExecutePayment(ctx context.Context, payment m
 			candidates = append(candidates, candidateProcessor{processor: p, health: status})
 		}
 	}
-
 	if len(candidates) == 0 {
-		return nil, errors.New("no healthy payment processors available")
+		return nil, NoHealthyPaymentAvailable
 	}
 	sort.Slice(candidates, func(i, j int) bool {
 		return candidates[i].health.MinResponseTime < candidates[j].health.MinResponseTime
@@ -48,16 +52,11 @@ func (o *RinhaPaymentOrchestrator) ExecutePayment(ctx context.Context, payment m
 
 		timeUtc, err := proc.ProcessPayment(ctx, &payment)
 		if err == nil {
-			return &models.CompletedPayment{
-				CorrelationID: payment.CorrelationId,
-				Amount:        payment.Amount,
-				Type:          proc.GetName(),
-				ProcessedAt:   timeUtc,
-			}, nil
+			return models.NewCompletedPayment(payment.CorrelationId, payment.Amount, proc.GetName(), timeUtc), nil
 		}
 		if errors.Is(err, processor.ErrPaymentDefinitive) {
 			return nil, err
 		}
 	}
-	return nil, errors.New("all healthy and sorted payment processors failed")
+	return nil, AllHealthyPaymentFailed
 }

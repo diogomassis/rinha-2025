@@ -3,11 +3,9 @@ package worker
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/diogomassis/rinha-2025/internal/env"
 	"github.com/diogomassis/rinha-2025/internal/models"
 	"github.com/diogomassis/rinha-2025/internal/services/cache"
 	"github.com/diogomassis/rinha-2025/internal/services/orchestrator"
@@ -15,10 +13,9 @@ import (
 
 type RinhaWorker struct {
 	numWorkers          int
-	redisQueue          *cache.RinhaRedisQueueService
 	redisPersistence    *cache.RinhaRedisPersistenceService
 	paymentOrchestrator *orchestrator.RinhaPaymentOrchestrator
-	mainQueueChannel    <-chan models.RinhaPendingPayment
+	pendingPaymentChan  <-chan models.RinhaPendingPayment
 
 	waitGroup  *sync.WaitGroup
 	cancelFunc context.CancelFunc
@@ -26,23 +23,21 @@ type RinhaWorker struct {
 
 func NewRinhaWorker(
 	numWorkers int,
-	redisQueue *cache.RinhaRedisQueueService,
 	redisPersistence *cache.RinhaRedisPersistenceService,
 	paymentOrchestrator *orchestrator.RinhaPaymentOrchestrator,
-	mainQueueChannel <-chan models.RinhaPendingPayment,
+	pendingPaymentChan <-chan models.RinhaPendingPayment,
 ) *RinhaWorker {
 	return &RinhaWorker{
 		numWorkers:          numWorkers,
-		redisQueue:          redisQueue,
 		redisPersistence:    redisPersistence,
 		paymentOrchestrator: paymentOrchestrator,
-		mainQueueChannel:    mainQueueChannel,
+		pendingPaymentChan:  pendingPaymentChan,
 		waitGroup:           &sync.WaitGroup{},
 	}
 }
 
 func (rw *RinhaWorker) Start() {
-	log.Info().Int("numWorkers", rw.numWorkers).Str("queue", env.Env.RedisQueueName).Msg("Starting workers")
+	log.Info().Int("numWorkers", rw.numWorkers).Msg("Starting workers")
 
 	var ctx context.Context
 	ctx, rw.cancelFunc = context.WithCancel(context.Background())
@@ -67,7 +62,7 @@ func (rw *RinhaWorker) worker(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case data := <-rw.mainQueueChannel:
+		case data := <-rw.pendingPaymentChan:
 			if err := rw.processPayment(ctx, data); err != nil {
 				log.Error().Err(err).Str("correlationId", data.CorrelationId).Msg("Error processing payment")
 			}
@@ -78,18 +73,8 @@ func (rw *RinhaWorker) worker(ctx context.Context) {
 func (rw *RinhaWorker) processPayment(ctx context.Context, data models.RinhaPendingPayment) error {
 	completedPayment, err := rw.paymentOrchestrator.ExecutePayment(ctx, data)
 	if err != nil {
-		return rw.handleFailedPayment(ctx, data)
+		return err
 	}
 	rw.redisPersistence.Add(ctx, *completedPayment)
 	return nil
-}
-
-func (rw *RinhaWorker) handleFailedPayment(ctx context.Context, data models.RinhaPendingPayment) error {
-	if data.RetryCount >= 3 {
-		return rw.redisQueue.AddToDeadLetterQueue(ctx, data)
-	}
-	data.RetryCount++
-	delay := time.Duration(1*data.RetryCount) * time.Millisecond
-	retryAt := time.Now().Add(delay)
-	return rw.redisQueue.AddToDelayedQueue(ctx, data, retryAt)
 }

@@ -20,7 +20,6 @@ import (
 	"github.com/diogomassis/rinha-2025/internal/services/health"
 	"github.com/diogomassis/rinha-2025/internal/services/orchestrator"
 	"github.com/diogomassis/rinha-2025/internal/services/processor"
-	"github.com/diogomassis/rinha-2025/internal/services/requeuer"
 	"github.com/diogomassis/rinha-2025/internal/services/worker"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/redis/go-redis/v9"
@@ -59,7 +58,6 @@ func main() {
 
 	mainQueueChannel := make(chan models.RinhaPendingPayment, 20000)
 
-	redisQueue := cache.NewRinhaRedisQueueService(redisConn)
 	redisPersistence := cache.NewRinhaRedisPersistenceService(redisConn)
 
 	processorDefault := processor.NewHTTPPaymentProcessor("default", env.Env.PaymentDefaultEndpoint)
@@ -70,16 +68,13 @@ func main() {
 
 	paymentOrchestrator := orchestrator.NewRinhaPaymentOrchestrator(healthMonitor, processorDefault, processorFallback)
 
-	workerPool := worker.NewRinhaWorker(env.Env.WorkerConcurrency, redisQueue, redisPersistence, paymentOrchestrator, mainQueueChannel)
+	workerPool := worker.NewRinhaWorker(env.Env.WorkerConcurrency, redisPersistence, paymentOrchestrator, mainQueueChannel)
 	go workerPool.Start()
-
-	requeuerService := requeuer.NewRinhaRequeuer(redisConn, env.Env.RedisQueueName)
-	go requeuerService.Start()
 
 	var wg sync.WaitGroup
 
 	grpcServer := grpc.NewServer()
-	pb.RegisterPaymentServiceServer(grpcServer, server.NewRinhaServer(redisQueue, redisPersistence, mainQueueChannel))
+	pb.RegisterPaymentServiceServer(grpcServer, server.NewRinhaServer(redisPersistence, mainQueueChannel))
 	reflection.Register(grpcServer)
 
 	wg.Add(1)
@@ -117,7 +112,6 @@ func main() {
 
 	workerPool.Stop()
 	redisConn.Close()
-	requeuerService.Stop()
 	grpcServer.GracefulStop()
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
