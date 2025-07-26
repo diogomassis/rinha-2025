@@ -3,6 +3,7 @@ package requeuer
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/diogomassis/rinha-2025/internal/models"
 	"github.com/rs/zerolog/log"
@@ -50,6 +51,7 @@ func (rr *RinhaRequeuer) requeueWorker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case paymentToRequeue := <-rr.retryPaymentChan:
+			time.Sleep(200 * time.Millisecond)
 			select {
 			case rr.pendingPaymentChan <- paymentToRequeue:
 			case <-ctx.Done():

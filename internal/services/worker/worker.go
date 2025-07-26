@@ -54,7 +54,7 @@ func (rw *RinhaWorker) worker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case data, ok := <-rw.pendingPaymentChan:
-			if !ok { // Canal foi fechado
+			if !ok {
 				return
 			}
 			if err := rw.processPayment(ctx, data); err != nil {
