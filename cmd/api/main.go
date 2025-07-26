@@ -56,8 +56,7 @@ func main() {
 		log.Info().Str("pong", pong).Msg("Redis connected successfully")
 	}
 
-	mainQueueChannel := make(chan models.RinhaPendingPayment, 30000)
-
+	pendingPaymentChan := make(chan models.RinhaPendingPayment, 30000)
 	redisPersistence := cache.NewRinhaRedisPersistenceService(redisConn)
 
 	processorDefault := processor.NewHTTPPaymentProcessor("default", env.Env.PaymentDefaultEndpoint)
@@ -68,13 +67,13 @@ func main() {
 
 	paymentOrchestrator := orchestrator.NewRinhaPaymentOrchestrator(healthMonitor, processorDefault, processorFallback)
 
-	workerPool := worker.NewRinhaWorker(env.Env.WorkerConcurrency, redisPersistence, paymentOrchestrator, mainQueueChannel)
+	workerPool := worker.NewRinhaWorker(env.Env.WorkerConcurrency, redisPersistence, paymentOrchestrator, pendingPaymentChan)
 	go workerPool.Start()
 
 	var wg sync.WaitGroup
 
 	grpcServer := grpc.NewServer()
-	pb.RegisterPaymentServiceServer(grpcServer, server.NewRinhaServer(redisPersistence, mainQueueChannel))
+	pb.RegisterPaymentServiceServer(grpcServer, server.NewRinhaServer(redisPersistence, pendingPaymentChan))
 	reflection.Register(grpcServer)
 
 	wg.Add(1)
