@@ -14,7 +14,7 @@ import (
 
 type PaymentProcessor interface {
 	GetName() string
-	ProcessPayment(ctx context.Context, payment *models.RinhaPendingPayment) (time.Time, error)
+	ProcessPayment(ctx context.Context, payment *models.RinhaPendingPayment) (*models.CompletedPayment, error)
 	CheckHealth() (*HealthStatus, error)
 }
 
@@ -59,33 +59,34 @@ func (p *HTTPPaymentProcessor) GetName() string {
 	return p.name
 }
 
-func (p *HTTPPaymentProcessor) ProcessPayment(ctx context.Context, payment *models.RinhaPendingPayment) (time.Time, error) {
+func (p *HTTPPaymentProcessor) ProcessPayment(ctx context.Context, payment *models.RinhaPendingPayment) (*models.CompletedPayment, error) {
+	payment.SetRequestedAt(time.Now())
+
 	jsonData, err := json.Marshal(payment)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("failed to marshal payment request: %w", err)
+		return nil, fmt.Errorf("failed to marshal payment request: %w", err)
 	}
 
 	paymentURL := fmt.Sprintf("%s/payments", p.url)
 	req, err := http.NewRequest(http.MethodPost, paymentURL, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return time.Time{}, fmt.Errorf("failed to create request for %s: %w", p.name, err)
+		return nil, fmt.Errorf("failed to create request for %s: %w", p.name, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := p.client.Do(req)
-	timeUtc := time.Now()
 	if err != nil {
-		return time.Time{}, fmt.Errorf("%w: %v", ErrServiceUnavailable, err)
+		return nil, fmt.Errorf("%w: %v", ErrServiceUnavailable, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return timeUtc, nil
+		return models.NewCompletedPayment(payment.CorrelationId, payment.Amount, "", payment.RequestedAt), nil
 	}
 	if resp.StatusCode >= 500 {
-		return time.Time{}, fmt.Errorf("%w: received status code %d", ErrServiceUnavailable, resp.StatusCode)
+		return nil, fmt.Errorf("%w: received status code %d", ErrServiceUnavailable, resp.StatusCode)
 	}
-	return time.Time{}, fmt.Errorf("%w: received status code %d", ErrPaymentDefinitive, resp.StatusCode)
+	return nil, fmt.Errorf("%w: received status code %d", ErrPaymentDefinitive, resp.StatusCode)
 }
 
 func (p *HTTPPaymentProcessor) CheckHealth() (*HealthStatus, error) {

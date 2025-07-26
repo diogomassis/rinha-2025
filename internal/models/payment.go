@@ -3,9 +3,9 @@ package models
 import "time"
 
 type RinhaPendingPayment struct {
-	CorrelationId string  `json:"correlationId"`
-	Amount        float64 `json:"amount"`
-	RetryCount    int     `json:"retryCount"`
+	CorrelationId string    `json:"correlationId"`
+	Amount        float64   `json:"amount"`
+	RequestedAt   time.Time `json:"requestedAt"`
 }
 
 func NewRinhaPendingPayment(correlationId string, amount float64) *RinhaPendingPayment {
@@ -13,6 +13,10 @@ func NewRinhaPendingPayment(correlationId string, amount float64) *RinhaPendingP
 		CorrelationId: correlationId,
 		Amount:        amount,
 	}
+}
+
+func (r *RinhaPendingPayment) SetRequestedAt(requestedAt time.Time) {
+	r.RequestedAt = requestedAt.UTC()
 }
 
 type PaymentSummary struct {
@@ -53,4 +57,8 @@ func NewCompletedPayment(correlationID string, amount float64, paymentType strin
 		Type:          paymentType,
 		ProcessedAt:   processedAt,
 	}
+}
+
+func (c *CompletedPayment) SetType(paymentType string) {
+	c.Type = paymentType
 }

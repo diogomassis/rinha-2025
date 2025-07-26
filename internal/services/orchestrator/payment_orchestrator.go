@@ -50,13 +50,15 @@ func (o *RinhaPaymentOrchestrator) ExecutePayment(ctx context.Context, payment m
 	for _, candidate := range candidates {
 		proc := candidate.processor
 
-		timeUtc, err := proc.ProcessPayment(ctx, &payment)
-		if err == nil {
-			return models.NewCompletedPayment(payment.CorrelationId, payment.Amount, proc.GetName(), timeUtc), nil
-		}
+		completedPayment, err := proc.ProcessPayment(ctx, &payment)
 		if errors.Is(err, processor.ErrPaymentDefinitive) {
 			return nil, err
 		}
+		if err != nil {
+			continue
+		}
+		completedPayment.SetType(proc.GetName())
+		return completedPayment, nil
 	}
 	return nil, AllHealthyPaymentFailed
 }
