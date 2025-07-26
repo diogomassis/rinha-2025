@@ -19,11 +19,15 @@ services:
   backend-1:
     image: rinha-2025
     environment:
-      - PORT=8080
-      - INSTANCE_NAME=backend-1
-      - REDIS_ADDR=redis-server:6379
-      - PAYMENT_DEFAULT_ENDPOINT=http://payment-processor-default:8080
-      - PAYMENT_FALLBACK_ENDPOINT=http://payment-processor-fallback:8080
+      - APP_PORT=8080
+      - INSTANCE_ID=backend-1
+      - REDIS_URL=redis-server:6379
+      - REDIS_QUEUE_NAME=pending_payments_queue
+      - REDIS_DELAYED_QUEUE_NAME=payments_queue_delayed
+      - REDIS_DEAD_LETTER_QUEUE_NAME=payments_queue_dead-letter
+      - PROCESSOR_DEFAULT_URL=http://payment-processor-default:8080
+      - PROCESSOR_FALLBACK_URL=http://payment-processor-fallback:8080
+      - WORKER_CONCURRENCY=100
     depends_on:
       redis-server:
         condition: service_healthy
@@ -40,11 +44,15 @@ services:
   backend-2:
     image: rinha-2025
     environment:
-      - PORT=8080
-      - INSTANCE_NAME=backend-2
-      - REDIS_ADDR=redis-server:6379
-      - PAYMENT_DEFAULT_ENDPOINT=http://payment-processor-default:8080
-      - PAYMENT_FALLBACK_ENDPOINT=http://payment-processor-fallback:8080
+      - APP_PORT=8080
+      - INSTANCE_ID=backend-2
+      - REDIS_URL=redis-server:6379
+      - REDIS_QUEUE_NAME=pending_payments_queue
+      - REDIS_DELAYED_QUEUE_NAME=payments_queue_delayed
+      - REDIS_DEAD_LETTER_QUEUE_NAME=payments_queue_dead-letter
+      - PROCESSOR_DEFAULT_URL=http://payment-processor-default:8080
+      - PROCESSOR_FALLBACK_URL=http://payment-processor-fallback:8080
+      - WORKER_CONCURRENCY=100
     depends_on:
       redis-server:
         condition: service_healthy
