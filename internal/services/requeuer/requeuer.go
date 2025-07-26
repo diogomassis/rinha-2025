@@ -5,11 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/diogomassis/rinha-2025/internal/env"
 	"github.com/redis/go-redis/v9"
-)
-
-const (
-	DELAYED_QUEUE_KEY = "payments:queue:delayed"
 )
 
 type RinhaRequeuer struct {
@@ -51,7 +48,7 @@ func (r *RinhaRequeuer) processDelayedItems() {
 	now := time.Now().Unix()
 	maxScore := fmt.Sprintf("%d", now)
 
-	items, err := r.redisClient.ZRangeByScore(ctx, DELAYED_QUEUE_KEY, &redis.ZRangeBy{
+	items, err := r.redisClient.ZRangeByScore(ctx, env.Env.RedisDelayedQueueName, &redis.ZRangeBy{
 		Min:   "0",
 		Max:   maxScore,
 		Count: 100,
@@ -65,6 +62,6 @@ func (r *RinhaRequeuer) processDelayedItems() {
 		pipe.LPush(ctx, r.mainQueueName, item)
 	}
 
-	pipe.ZRemRangeByScore(ctx, DELAYED_QUEUE_KEY, "0", maxScore)
+	pipe.ZRemRangeByScore(ctx, env.Env.RedisDelayedQueueName, "0", maxScore)
 	pipe.Exec(ctx)
 }

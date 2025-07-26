@@ -40,11 +40,17 @@ type HTTPPaymentProcessor struct {
 }
 
 func NewHTTPPaymentProcessor(name, url string) *HTTPPaymentProcessor {
+	transport := &http.Transport{
+		MaxIdleConns:        200,
+		MaxIdleConnsPerHost: 200,
+		IdleConnTimeout:     10 * time.Second,
+	}
 	return &HTTPPaymentProcessor{
 		name: name,
 		url:  url,
 		client: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout:   10 * time.Second,
+			Transport: transport,
 		},
 	}
 }
