@@ -3,10 +3,11 @@ package processor
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
+
+	json "github.com/json-iterator/go"
 
 	"github.com/diogomassis/rinha-2025/internal/models"
 )
@@ -39,11 +40,18 @@ type HTTPPaymentProcessor struct {
 }
 
 func NewHTTPPaymentProcessor(name, url string, timeout time.Duration) *HTTPPaymentProcessor {
+	transport := &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 100,
+		IdleConnTimeout:     90 * time.Second,
+		DisableKeepAlives:   false,
+	}
 	return &HTTPPaymentProcessor{
 		name: name,
 		url:  url,
 		client: &http.Client{
-			Timeout: timeout,
+			Timeout:   timeout,
+			Transport: transport,
 		},
 	}
 }
