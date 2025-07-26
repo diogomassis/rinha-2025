@@ -6,18 +6,18 @@ toolchain go1.23.11
 
 require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1
+	github.com/json-iterator/go v1.1.12
+	github.com/rs/zerolog v1.34.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20250707201910-8d1bb00bc6a7
 	google.golang.org/grpc v1.73.0
 	google.golang.org/protobuf v1.36.6
 )
 
 require (
-	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.19 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421 // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
-	github.com/rs/zerolog v1.34.0 // indirect
 )
 
 require (
