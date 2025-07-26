@@ -56,7 +56,7 @@ func main() {
 		log.Info().Str("pong", pong).Msg("Redis connected successfully")
 	}
 
-	mainQueueChannel := make(chan models.RinhaPendingPayment, 20000)
+	mainQueueChannel := make(chan models.RinhaPendingPayment, 30000)
 
 	redisPersistence := cache.NewRinhaRedisPersistenceService(redisConn)
 
