@@ -38,7 +38,6 @@ func (s *RinhaServer) Payments(ctx context.Context, in *pb.PaymentRequest) (*pb.
 		}, nil
 	}
 
-	log.Printf("[server][info] payment queued successfully (correlation_id=%s, amount=%.2f)", in.CorrelationId, in.Amount)
 	return &pb.PaymentResponse{
 		Code:    http.StatusCreated,
 		Message: "Payment queued for processing",

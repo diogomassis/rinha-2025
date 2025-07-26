@@ -3,7 +3,6 @@ package requeuer
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -28,7 +27,6 @@ func NewRinhaRequeuer(client *redis.Client, mainQueueName string) *RinhaRequeuer
 }
 
 func (r *RinhaRequeuer) Start() {
-	log.Printf("[requeuer] Starting requeuer for delayed queue '%s'...", DELAYED_QUEUE_KEY)
 	ticker := time.NewTicker(5 * time.Second)
 
 	go func() {
@@ -38,7 +36,6 @@ func (r *RinhaRequeuer) Start() {
 				r.processDelayedItems()
 			case <-r.stopChan:
 				ticker.Stop()
-				log.Println("[requeuer] Requeuer stopped.")
 				return
 			}
 		}
@@ -46,7 +43,6 @@ func (r *RinhaRequeuer) Start() {
 }
 
 func (r *RinhaRequeuer) Stop() {
-	log.Println("[requeuer] Shutting down the requeuer...")
 	close(r.stopChan)
 }
 
@@ -64,14 +60,11 @@ func (r *RinhaRequeuer) processDelayedItems() {
 		return
 	}
 
-	log.Printf("[requeuer] Found %d items to requeue.", len(items))
 	pipe := r.redisClient.Pipeline()
 	for _, item := range items {
 		pipe.LPush(ctx, r.mainQueueName, item)
 	}
 
 	pipe.ZRemRangeByScore(ctx, DELAYED_QUEUE_KEY, "0", maxScore)
-	if _, err := pipe.Exec(ctx); err != nil {
-		log.Printf("[requeuer] ERROR executing requeue pipeline: %v", err)
-	}
+	pipe.Exec(ctx)
 }

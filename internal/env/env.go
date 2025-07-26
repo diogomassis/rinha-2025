@@ -34,17 +34,6 @@ func Load() {
 		RedisDelayedQueueName:    getOptionalEnv("REDIS_DELAYED_QUEUE_NAME", "payments_queue_delayed"),
 		RedisDeadLetterQueueName: getOptionalEnv("REDIS_DEAD_LETTER_QUEUE_NAME", "payments_queue_dead-letter"),
 	}
-
-	log.Printf("[ENV] Environment variables loaded successfully:")
-	log.Printf("  - Instance: %s", Env.InstanceName)
-	log.Printf("  - Redis: %s", Env.RedisAddr)
-	log.Printf("  - Backend Port: %s", Env.Port)
-	log.Printf("  - Default Processor: %s", Env.PaymentDefaultEndpoint)
-	log.Printf("  - Fallback Processor: %s", Env.PaymentFallbackEndpoint)
-	log.Printf("  - Worker Concurrency: %d", Env.WorkerConcurrency)
-	log.Printf("  - Redis Queue Name: %s", Env.RedisQueueName)
-	log.Printf("  - Redis Delayed Queue Name: %s", Env.RedisDelayedQueueName)
-	log.Printf("  - Redis Dead Letter Queue Name: %s", Env.RedisDeadLetterQueueName)
 }
 
 func getRequiredEnv(key string) string {

@@ -49,12 +49,9 @@ func (m *RinhaMonitor) Start() {
 }
 
 func (m *RinhaMonitor) checkAllProcessors() {
-	log.Println("[health] Running periodic health checks...")
-
 	for _, p := range m.processors {
 		status, err := p.CheckHealth()
 		if err != nil {
-			log.Printf("[health] ERROR checking health for %s: %v. Marking as failing.", p.GetName(), err)
 			m.updateStatus(p.GetName(), processor.HealthStatus{Failing: true})
 			continue
 		}
@@ -66,5 +63,4 @@ func (m *RinhaMonitor) updateStatus(name string, status processor.HealthStatus) 
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.cache[name] = status
-	log.Printf("[health] Updated status for %s: Failing=%t, MinResponseTime=%dms", name, status.Failing, status.MinResponseTime)
 }
