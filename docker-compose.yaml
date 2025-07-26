@@ -27,7 +27,7 @@ services:
       - REDIS_DEAD_LETTER_QUEUE_NAME=payments_queue_dead-letter
       - PROCESSOR_DEFAULT_URL=http://payment-processor-default:8080
       - PROCESSOR_FALLBACK_URL=http://payment-processor-fallback:8080
-      - WORKER_CONCURRENCY=100
+      - WORKER_CONCURRENCY=50
     depends_on:
       redis-server:
         condition: service_healthy
@@ -52,7 +52,7 @@ services:
       - REDIS_DEAD_LETTER_QUEUE_NAME=payments_queue_dead-letter
       - PROCESSOR_DEFAULT_URL=http://payment-processor-default:8080
       - PROCESSOR_FALLBACK_URL=http://payment-processor-fallback:8080
-      - WORKER_CONCURRENCY=100
+      - WORKER_CONCURRENCY=50
     depends_on:
       redis-server:
         condition: service_healthy
