@@ -4,9 +4,9 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
-	"github.com/diogomassis/rinha-2025/internal/env"
 	"github.com/diogomassis/rinha-2025/internal/models"
 	pb "github.com/diogomassis/rinha-2025/internal/proto"
 	"github.com/diogomassis/rinha-2025/internal/services/cache"
@@ -29,7 +29,7 @@ func NewRinhaServer(redisQueue *cache.RinhaRedisQueueService, redisPersistence *
 
 func (s *RinhaServer) Payments(ctx context.Context, in *pb.PaymentRequest) (*pb.PaymentResponse, error) {
 	pendingPayment := models.NewRinhaPendingPayment(in.CorrelationId, in.Amount)
-	err := s.redisQueue.AddToQueue(ctx, env.Env.InstanceName, *pendingPayment)
+	err := s.redisQueue.AddToQueue(ctx, *pendingPayment)
 	if err != nil {
 		log.Printf("[server][error] unable to queue payment (correlation_id=%s, amount=%.2f): %v", in.CorrelationId, in.Amount, err)
 		return &pb.PaymentResponse{
@@ -50,15 +50,23 @@ func (s *RinhaServer) PaymentsSummary(ctx context.Context, in *pb.PaymentsSummar
 	var err error
 
 	if in.From != "" {
-		from, err = time.Parse(time.UTC.String(), in.From)
+		fromStr := in.From
+		if !strings.HasSuffix(fromStr, "Z") {
+			fromStr += "Z"
+		}
+		from, err = time.Parse(time.RFC3339Nano, fromStr)
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, "invalid 'from' date format - must be ISO UTC format ending with Z")
+			return nil, status.Error(codes.InvalidArgument, "invalid 'from' date format - must be ISO UTC format")
 		}
 	}
 	if in.To != "" {
-		to, err = time.Parse(time.UTC.String(), in.To)
+		toStr := in.To
+		if !strings.HasSuffix(toStr, "Z") {
+			toStr += "Z"
+		}
+		to, err = time.Parse(time.RFC3339Nano, toStr)
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, "invalid 'to' date format - must be ISO UTC format ending with Z")
+			return nil, status.Error(codes.InvalidArgument, "invalid 'to' date format - must be ISO UTC format")
 		}
 	}
 
