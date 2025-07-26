@@ -39,12 +39,12 @@ func main() {
 		Addr:         env.Env.RedisAddr,
 		Password:     "",
 		DB:           0,
-		PoolSize:     100,
-		MinIdleConns: 10,
-		DialTimeout:  5 * time.Second,
-		ReadTimeout:  3 * time.Second,
-		WriteTimeout: 3 * time.Second,
-		PoolTimeout:  4 * time.Second,
+		PoolSize:     200,
+		MinIdleConns: 20,
+		DialTimeout:  10 * time.Second,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		PoolTimeout:  10 * time.Second,
 	})
 	if pong, err := redisConn.Ping(ctx).Result(); err != nil {
 		log.Fatalf("[main] Redis ping failed: %v", err)
@@ -63,11 +63,10 @@ func main() {
 
 	paymentOrchestrator := orchestrator.NewRinhaPaymentOrchestrator(healthMonitor, processorDefault, processorFallback)
 
-	numWorkers := 50
-	workerPool := worker.NewRinhaWorker(numWorkers, redisQueue, redisPersistence, paymentOrchestrator)
+	workerPool := worker.NewRinhaWorker(env.Env.WorkerConcurrency, redisQueue, redisPersistence, paymentOrchestrator)
 	go workerPool.Start()
 
-	requeuerService := requeuer.NewRinhaRequeuer(redisConn, env.Env.InstanceName)
+	requeuerService := requeuer.NewRinhaRequeuer(redisConn, env.Env.RedisQueueName)
 	go requeuerService.Start()
 
 	var wg sync.WaitGroup
