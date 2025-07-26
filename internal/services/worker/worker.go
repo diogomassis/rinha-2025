@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	"github.com/rs/zerolog/log"
@@ -16,24 +17,10 @@ type RinhaWorker struct {
 	redisPersistence    *cache.RinhaRedisPersistenceService
 	paymentOrchestrator *orchestrator.RinhaPaymentOrchestrator
 	pendingPaymentChan  <-chan models.RinhaPendingPayment
+	retryPaymentChan    chan<- models.RinhaPendingPayment
 
 	waitGroup  *sync.WaitGroup
 	cancelFunc context.CancelFunc
-}
-
-func NewRinhaWorker(
-	numWorkers int,
-	redisPersistence *cache.RinhaRedisPersistenceService,
-	paymentOrchestrator *orchestrator.RinhaPaymentOrchestrator,
-	pendingPaymentChan <-chan models.RinhaPendingPayment,
-) *RinhaWorker {
-	return &RinhaWorker{
-		numWorkers:          numWorkers,
-		redisPersistence:    redisPersistence,
-		paymentOrchestrator: paymentOrchestrator,
-		pendingPaymentChan:  pendingPaymentChan,
-		waitGroup:           &sync.WaitGroup{},
-	}
 }
 
 func (rw *RinhaWorker) Start() {
@@ -43,7 +30,7 @@ func (rw *RinhaWorker) Start() {
 	ctx, rw.cancelFunc = context.WithCancel(context.Background())
 
 	for i := 1; i <= rw.numWorkers; i++ {
-		rw.waitGroup.Add(i)
+		rw.waitGroup.Add(1)
 		go rw.worker(ctx)
 	}
 }
@@ -66,9 +53,15 @@ func (rw *RinhaWorker) worker(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case data := <-rw.pendingPaymentChan:
+		case data, ok := <-rw.pendingPaymentChan:
+			if !ok { // Canal foi fechado
+				return
+			}
 			if err := rw.processPayment(ctx, data); err != nil {
-				log.Error().Err(err).Str("correlationId", data.CorrelationId).Msg("Error processing payment")
+				if !errors.Is(err, orchestrator.AllHealthyPaymentFailed) &&
+					!errors.Is(err, orchestrator.NoHealthyPaymentAvailable) {
+					log.Error().Err(err).Str("correlationId", data.CorrelationId).Msg("Definitive error processing payment")
+				}
 			}
 		}
 	}
@@ -77,6 +70,12 @@ func (rw *RinhaWorker) worker(ctx context.Context) {
 func (rw *RinhaWorker) processPayment(ctx context.Context, data models.RinhaPendingPayment) error {
 	completedPayment, err := rw.paymentOrchestrator.ExecutePayment(ctx, data)
 	if err != nil {
+		if errors.Is(err, orchestrator.AllHealthyPaymentFailed) || errors.Is(err, orchestrator.NoHealthyPaymentAvailable) {
+			select {
+			case rw.retryPaymentChan <- data:
+			case <-ctx.Done():
+			}
+		}
 		return err
 	}
 	rw.redisPersistence.Add(ctx, *completedPayment)

@@ -1,3 +1,4 @@
+// File: cmd/api/main.go
 package main
 
 import (
@@ -21,6 +22,7 @@ import (
 	"github.com/diogomassis/rinha-2025/internal/services/health"
 	"github.com/diogomassis/rinha-2025/internal/services/orchestrator"
 	"github.com/diogomassis/rinha-2025/internal/services/processor"
+	"github.com/diogomassis/rinha-2025/internal/services/requeuer"
 	"github.com/diogomassis/rinha-2025/internal/services/worker"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/redis/go-redis/v9"
@@ -58,6 +60,7 @@ func main() {
 	}
 
 	pendingPaymentChan := make(chan models.RinhaPendingPayment, 30000)
+	retryPaymentChan := make(chan models.RinhaPendingPayment, 30000)
 	redisPersistence := cache.NewRinhaRedisPersistenceService(redisConn)
 
 	processorDefault := processor.NewHTTPPaymentProcessor("default", env.Env.PaymentDefaultEndpoint)
@@ -68,7 +71,19 @@ func main() {
 
 	paymentOrchestrator := orchestrator.NewRinhaPaymentOrchestrator(healthMonitor, processorDefault, processorFallback)
 
-	workerPool := worker.NewRinhaWorker(env.Env.WorkerConcurrency, redisPersistence, paymentOrchestrator, pendingPaymentChan)
+	paymentRequeuer := requeuer.NewRinhaRequeuer(retryPaymentChan, pendingPaymentChan)
+	go paymentRequeuer.Start()
+
+	workerPool, err := worker.NewRinhaWorkerBuilder().
+		WithNumWorkers(env.Env.WorkerConcurrency).
+		WithRedisPersistence(redisPersistence).
+		WithPaymentOrchestrator(paymentOrchestrator).
+		WithPendingPaymentChannel(pendingPaymentChan).
+		WithRetryPaymentChannel(retryPaymentChan).
+		Build()
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to build worker pool")
+	}
 	go workerPool.Start()
 
 	var wg sync.WaitGroup
@@ -118,8 +133,10 @@ func main() {
 	}
 
 	close(pendingPaymentChan)
+	close(retryPaymentChan)
 
 	healthMonitor.Stop()
+	paymentRequeuer.Stop()
 	workerPool.Wait()
 	redisConn.Close()
 
