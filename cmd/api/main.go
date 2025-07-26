@@ -55,8 +55,8 @@ func main() {
 	redisQueue := cache.NewRinhaRedisQueueService(redisConn)
 	redisPersistence := cache.NewRinhaRedisPersistenceService(redisConn)
 
-	processorDefault := processor.NewHTTPPaymentProcessor("default", env.Env.PaymentDefaultEndpoint, 5*time.Second)
-	processorFallback := processor.NewHTTPPaymentProcessor("fallback", env.Env.PaymentFallbackEndpoint, 10*time.Second)
+	processorDefault := processor.NewHTTPPaymentProcessor("default", env.Env.PaymentDefaultEndpoint, 1*time.Millisecond)
+	processorFallback := processor.NewHTTPPaymentProcessor("fallback", env.Env.PaymentFallbackEndpoint, 2*time.Millisecond)
 
 	healthMonitor := health.NewMonitor(processorDefault, processorFallback)
 	go healthMonitor.Start()

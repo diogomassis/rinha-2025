@@ -14,7 +14,7 @@ import (
 
 type PaymentProcessor interface {
 	GetName() string
-	ProcessPayment(ctx context.Context, payment *models.RinhaPendingPayment) error
+	ProcessPayment(ctx context.Context, payment *models.RinhaPendingPayment) (time.Time, error)
 	CheckHealth() (*HealthStatus, error)
 }
 
@@ -60,32 +60,33 @@ func (p *HTTPPaymentProcessor) GetName() string {
 	return p.name
 }
 
-func (p *HTTPPaymentProcessor) ProcessPayment(ctx context.Context, payment *models.RinhaPendingPayment) error {
+func (p *HTTPPaymentProcessor) ProcessPayment(ctx context.Context, payment *models.RinhaPendingPayment) (time.Time, error) {
 	jsonData, err := json.Marshal(payment)
 	if err != nil {
-		return fmt.Errorf("failed to marshal payment request: %w", err)
+		return time.Time{}, fmt.Errorf("failed to marshal payment request: %w", err)
 	}
 
 	paymentURL := fmt.Sprintf("%s/payments", p.url)
 	req, err := http.NewRequest(http.MethodPost, paymentURL, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return fmt.Errorf("failed to create request for %s: %w", p.name, err)
+		return time.Time{}, fmt.Errorf("failed to create request for %s: %w", p.name, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := p.client.Do(req)
+	timeUtc := time.Now()
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrServiceUnavailable, err)
+		return time.Time{}, fmt.Errorf("%w: %v", ErrServiceUnavailable, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return nil
+		return timeUtc, nil
 	}
 	if resp.StatusCode >= 500 {
-		return fmt.Errorf("%w: received status code %d", ErrServiceUnavailable, resp.StatusCode)
+		return time.Time{}, fmt.Errorf("%w: received status code %d", ErrServiceUnavailable, resp.StatusCode)
 	}
-	return fmt.Errorf("%w: received status code %d", ErrPaymentDefinitive, resp.StatusCode)
+	return time.Time{}, fmt.Errorf("%w: received status code %d", ErrPaymentDefinitive, resp.StatusCode)
 }
 
 func (p *HTTPPaymentProcessor) CheckHealth() (*HealthStatus, error) {

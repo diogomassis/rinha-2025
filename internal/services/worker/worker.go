@@ -74,9 +74,7 @@ func (rw *RinhaWorker) worker(ctx context.Context, id int) {
 				}
 				continue
 			}
-			if err := rw.processPayment(ctx, *data); err != nil {
-				// Error already handled in processPayment
-			}
+			rw.processPayment(ctx, *data)
 		}
 	}
 }
@@ -86,11 +84,7 @@ func (rw *RinhaWorker) processPayment(ctx context.Context, data models.RinhaPend
 	if err != nil {
 		return rw.handleFailedPayment(ctx, data)
 	}
-
-	if err := rw.redisPersistence.Add(ctx, *completedPayment); err != nil {
-		return rw.handleFailedPayment(ctx, data)
-	}
-
+	rw.redisPersistence.Add(ctx, *completedPayment)
 	return nil
 }
 
@@ -98,9 +92,8 @@ func (rw *RinhaWorker) handleFailedPayment(ctx context.Context, data models.Rinh
 	if data.RetryCount >= 3 {
 		return rw.redisQueue.AddToDeadLetterQueue(ctx, data)
 	}
-
 	data.RetryCount++
-	delay := time.Duration(10*data.RetryCount) * time.Second
+	delay := time.Duration(1*data.RetryCount) * time.Millisecond
 	retryAt := time.Now().Add(delay)
 	return rw.redisQueue.AddToDelayedQueue(ctx, data, retryAt)
 }

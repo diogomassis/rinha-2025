@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"sort"
-	"time"
 
 	"github.com/diogomassis/rinha-2025/internal/models"
 	"github.com/diogomassis/rinha-2025/internal/services/health"
@@ -47,13 +46,13 @@ func (o *RinhaPaymentOrchestrator) ExecutePayment(ctx context.Context, payment m
 	for _, candidate := range candidates {
 		proc := candidate.processor
 
-		err := proc.ProcessPayment(ctx, &payment)
+		timeUtc, err := proc.ProcessPayment(ctx, &payment)
 		if err == nil {
 			return &models.CompletedPayment{
 				CorrelationID: payment.CorrelationId,
 				Amount:        payment.Amount,
 				Type:          proc.GetName(),
-				ProcessedAt:   time.Now(),
+				ProcessedAt:   timeUtc,
 			}, nil
 		}
 		if errors.Is(err, processor.ErrPaymentDefinitive) {
@@ -61,12 +60,4 @@ func (o *RinhaPaymentOrchestrator) ExecutePayment(ctx context.Context, payment m
 		}
 	}
 	return nil, errors.New("all healthy and sorted payment processors failed")
-}
-
-func getCandidateNames(candidates []candidateProcessor) []string {
-	names := make([]string, len(candidates))
-	for i, c := range candidates {
-		names[i] = c.processor.GetName()
-	}
-	return names
 }
