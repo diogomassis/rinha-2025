@@ -3,3 +3,6 @@
 
 # Ignore all files and directories inside the .rinha/ folder
 .rinha/
+
+# Ignore all files and directories inside the bin/ folder
+bin/
