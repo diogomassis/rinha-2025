@@ -55,6 +55,10 @@ func (rw *RinhaWorker) Stop() {
 	rw.waitGroup.Wait()
 }
 
+func (rw *RinhaWorker) Wait() {
+	rw.waitGroup.Wait()
+}
+
 func (rw *RinhaWorker) worker(ctx context.Context) {
 	defer rw.waitGroup.Done()
 

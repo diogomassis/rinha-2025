@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -95,7 +96,7 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to register gateway")
 	}
 	port := ":" + env.Env.Port
-	httpServer := &http.Server{Addr: port, Handler: mux}
+	httpServer := &http.Server{Addr: port, Handler: grpcHandlerFunc(grpcServer, newGatewayMux(ctx))}
 
 	wg.Add(1)
 	go func() {
@@ -109,16 +110,38 @@ func main() {
 	<-ctx.Done()
 	log.Info().Msg("Shutdown signal received. Gracefully shutting down...")
 
-	workerPool.Stop()
-	redisConn.Close()
-	grpcServer.GracefulStop()
-
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
+
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		log.Error().Err(err).Msg("HTTP server shutdown error")
 	}
 
+	close(pendingPaymentChan)
+
+	healthMonitor.Stop()
+	workerPool.Wait()
+	redisConn.Close()
+
 	wg.Wait()
 	log.Info().Msg("Application terminated successfully.")
+}
+
+func newGatewayMux(ctx context.Context) http.Handler {
+	mux := runtime.NewServeMux()
+	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	if err := pb.RegisterPaymentServiceHandlerFromEndpoint(ctx, mux, addr, opts); err != nil {
+		log.Fatal().Err(err).Msg("Failed to register gateway")
+	}
+	return mux
+}
+
+func grpcHandlerFunc(grpcServer *grpc.Server, otherHandler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
+			grpcServer.ServeHTTP(w, r)
+		} else {
+			otherHandler.ServeHTTP(w, r)
+		}
+	})
 }

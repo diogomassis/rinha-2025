@@ -31,6 +31,10 @@ func (m *RinhaMonitor) GetStatus(processorName string) (processor.HealthStatus, 
 	return status, found
 }
 
+func (m *RinhaMonitor) Stop() {
+	close(m.stopChan)
+}
+
 func (m *RinhaMonitor) Start() {
 	log.Info().Msg("Starting health monitor...")
 	ticker := time.NewTicker(5 * time.Second)
