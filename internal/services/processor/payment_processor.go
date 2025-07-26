@@ -39,19 +39,12 @@ type HTTPPaymentProcessor struct {
 	client *http.Client
 }
 
-func NewHTTPPaymentProcessor(name, url string, timeout time.Duration) *HTTPPaymentProcessor {
-	transport := &http.Transport{
-		MaxIdleConns:        100,
-		MaxIdleConnsPerHost: 100,
-		IdleConnTimeout:     90 * time.Second,
-		DisableKeepAlives:   false,
-	}
+func NewHTTPPaymentProcessor(name, url string) *HTTPPaymentProcessor {
 	return &HTTPPaymentProcessor{
 		name: name,
 		url:  url,
 		client: &http.Client{
-			Timeout:   timeout,
-			Transport: transport,
+			Timeout: 10 * time.Second,
 		},
 	}
 }
