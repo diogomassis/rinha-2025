@@ -16,7 +16,6 @@ import (
 
 type RinhaWorker struct {
 	numWorkers          int
-	queueName           string
 	redisQueue          *cache.RinhaRedisQueueService
 	redisPersistence    *cache.RinhaRedisPersistenceService
 	paymentOrchestrator *orchestrator.RinhaPaymentOrchestrator
@@ -33,7 +32,6 @@ func NewRinhaWorker(
 ) *RinhaWorker {
 	return &RinhaWorker{
 		numWorkers:          numWorkers,
-		queueName:           env.Env.InstanceName,
 		redisQueue:          redisQueue,
 		redisPersistence:    redisPersistence,
 		paymentOrchestrator: paymentOrchestrator,
@@ -42,7 +40,7 @@ func NewRinhaWorker(
 }
 
 func (rw *RinhaWorker) Start() {
-	log.Printf("[worker] Starting %d workers for queue: %s", rw.numWorkers, rw.queueName)
+	log.Printf("[worker] Starting %d workers for queue: %s", rw.numWorkers, env.Env.RedisQueueName)
 
 	var ctx context.Context
 	ctx, rw.cancelFunc = context.WithCancel(context.Background())
@@ -74,7 +72,7 @@ func (rw *RinhaWorker) worker(ctx context.Context, id int) {
 			log.Printf("[worker] Worker #%d received shutdown signal, exiting...", id)
 			return
 		default:
-			data, err := rw.redisQueue.PopFromQueue(ctx, rw.queueName)
+			data, err := rw.redisQueue.PopFromQueue(ctx)
 			if err != nil {
 				if errors.Is(err, context.Canceled) || errors.Is(err, redis.Nil) {
 					continue
@@ -88,10 +86,6 @@ func (rw *RinhaWorker) worker(ctx context.Context, id int) {
 		}
 	}
 }
-
-const MAX_RETRIES = 3
-const DELAYED_QUEUE_KEY = "payments:queue:delayed"
-const DEAD_LETTER_QUEUE_KEY = "payments:queue:dead-letter"
 
 func (rw *RinhaWorker) processPayment(ctx context.Context, data models.RinhaPendingPayment) error {
 	log.Printf("[worker] Processing payment %s (Attempt #%d)", data.CorrelationId, data.RetryCount+1)
@@ -112,14 +106,14 @@ func (rw *RinhaWorker) processPayment(ctx context.Context, data models.RinhaPend
 }
 
 func (rw *RinhaWorker) handleFailedPayment(ctx context.Context, data models.RinhaPendingPayment) error {
-	if data.RetryCount >= MAX_RETRIES {
+	if data.RetryCount >= 3 {
 		log.Printf("[worker] Payment %s exceeded max retries. Moving to Dead Letter Queue.", data.CorrelationId)
-		return rw.redisQueue.AddToDeadLetterQueue(ctx, DEAD_LETTER_QUEUE_KEY, data)
+		return rw.redisQueue.AddToDeadLetterQueue(ctx, data)
 	}
 
 	data.RetryCount++
 	delay := time.Duration(10*data.RetryCount) * time.Second
 	retryAt := time.Now().Add(delay)
 	log.Printf("[worker] Re-queueing payment %s for another attempt in %v.", data.CorrelationId, delay)
-	return rw.redisQueue.AddToDelayedQueue(ctx, DELAYED_QUEUE_KEY, data, retryAt)
+	return rw.redisQueue.AddToDelayedQueue(ctx, data, retryAt)
 }
