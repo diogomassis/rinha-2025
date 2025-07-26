@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
 	"net"
 	"net/http"
 	"os/signal"
@@ -11,7 +10,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/rs/zerolog/log"
+
 	"github.com/diogomassis/rinha-2025/internal/env"
+	"github.com/diogomassis/rinha-2025/internal/models"
 	pb "github.com/diogomassis/rinha-2025/internal/proto"
 	"github.com/diogomassis/rinha-2025/internal/server"
 	"github.com/diogomassis/rinha-2025/internal/services/cache"
@@ -22,6 +24,7 @@ import (
 	"github.com/diogomassis/rinha-2025/internal/services/worker"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
@@ -31,6 +34,8 @@ var addr string = "0.0.0.0:3030"
 
 func main() {
 	env.Load()
+
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -47,10 +52,12 @@ func main() {
 		PoolTimeout:  10 * time.Second,
 	})
 	if pong, err := redisConn.Ping(ctx).Result(); err != nil {
-		log.Fatalf("[main] Redis ping failed: %v", err)
+		log.Fatal().Err(err).Msg("Redis ping failed")
 	} else {
-		log.Printf("[main] Redis connected successfully: %s", pong)
+		log.Info().Str("pong", pong).Msg("Redis connected successfully")
 	}
+
+	mainQueueChannel := make(chan models.RinhaPendingPayment, 20000)
 
 	redisQueue := cache.NewRinhaRedisQueueService(redisConn)
 	redisPersistence := cache.NewRinhaRedisPersistenceService(redisConn)
@@ -63,7 +70,7 @@ func main() {
 
 	paymentOrchestrator := orchestrator.NewRinhaPaymentOrchestrator(healthMonitor, processorDefault, processorFallback)
 
-	workerPool := worker.NewRinhaWorker(env.Env.WorkerConcurrency, redisQueue, redisPersistence, paymentOrchestrator)
+	workerPool := worker.NewRinhaWorker(env.Env.WorkerConcurrency, redisQueue, redisPersistence, paymentOrchestrator, mainQueueChannel)
 	go workerPool.Start()
 
 	requeuerService := requeuer.NewRinhaRequeuer(redisConn, env.Env.RedisQueueName)
@@ -72,7 +79,7 @@ func main() {
 	var wg sync.WaitGroup
 
 	grpcServer := grpc.NewServer()
-	pb.RegisterPaymentServiceServer(grpcServer, server.NewRinhaServer(redisQueue, redisPersistence))
+	pb.RegisterPaymentServiceServer(grpcServer, server.NewRinhaServer(redisQueue, redisPersistence, mainQueueChannel))
 	reflection.Register(grpcServer)
 
 	wg.Add(1)
@@ -80,18 +87,18 @@ func main() {
 		defer wg.Done()
 		lis, err := net.Listen("tcp", addr)
 		if err != nil {
-			log.Fatalf("failed to listen: %v", err)
+			log.Fatal().Err(err).Msg("failed to listen")
 		}
-		log.Printf("gRPC server listening at %s", addr)
+		log.Info().Str("addr", addr).Msg("gRPC server listening")
 		if err := grpcServer.Serve(lis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
-			log.Fatalf("gRPC server failed: %v", err)
+			log.Fatal().Err(err).Msg("gRPC server failed")
 		}
 	}()
 
 	mux := runtime.NewServeMux()
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 	if err := pb.RegisterPaymentServiceHandlerFromEndpoint(ctx, mux, addr, opts); err != nil {
-		log.Fatalf("[main] failed to register gateway: %v", err)
+		log.Fatal().Err(err).Msg("failed to register gateway")
 	}
 	port := ":" + env.Env.Port
 	httpServer := &http.Server{Addr: port, Handler: mux}
@@ -99,14 +106,14 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		log.Printf("[%s] HTTP gateway listening at %s", env.Env.InstanceName, port)
+		log.Info().Str("instance", env.Env.InstanceName).Str("port", port).Msg("HTTP gateway listening")
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("HTTP gateway failed: %v", err)
+			log.Fatal().Err(err).Msg("HTTP gateway failed")
 		}
 	}()
 
 	<-ctx.Done()
-	log.Println("[main] Shutdown signal received. Gracefully shutting down...")
+	log.Info().Msg("Shutdown signal received. Gracefully shutting down...")
 
 	workerPool.Stop()
 	redisConn.Close()
@@ -116,9 +123,9 @@ func main() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		log.Printf("HTTP server shutdown error: %v", err)
+		log.Error().Err(err).Msg("HTTP server shutdown error")
 	}
 
 	wg.Wait()
-	log.Println("[main] Application terminated successfully.")
+	log.Info().Msg("Application terminated successfully.")
 }

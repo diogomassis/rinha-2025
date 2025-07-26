@@ -3,13 +3,13 @@ package cache
 import (
 	"context"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/diogomassis/rinha-2025/internal/models"
 	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog/log"
 )
 
 type RinhaRedisPersistenceService struct {
@@ -78,7 +78,7 @@ func (r *RinhaRedisPersistenceService) getSummaryForType(ctx context.Context, pa
 		}
 		amount, err := strconv.ParseFloat(parts[len(parts)-1], 64)
 		if err != nil {
-			log.Printf("[persistence] ERROR: Could not parse amount from member '%s'. Error: %v", member, err)
+			log.Error().Msgf("[persistence] ERROR: Could not parse amount from member '%s'. Error: %v", member, err)
 			continue
 		}
 		totalAmount += amount

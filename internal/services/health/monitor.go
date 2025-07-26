@@ -1,9 +1,10 @@
 package health
 
 import (
-	"log"
 	"sync"
 	"time"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/diogomassis/rinha-2025/internal/services/processor"
 )
@@ -31,7 +32,7 @@ func (m *RinhaMonitor) GetStatus(processorName string) (processor.HealthStatus, 
 }
 
 func (m *RinhaMonitor) Start() {
-	log.Println("[health] Starting health monitor...")
+	log.Info().Msg("Starting health monitor...")
 	ticker := time.NewTicker(5 * time.Second)
 	go func() {
 		m.checkAllProcessors()
@@ -41,7 +42,7 @@ func (m *RinhaMonitor) Start() {
 				m.checkAllProcessors()
 			case <-m.stopChan:
 				ticker.Stop()
-				log.Println("[health] Health monitor stopped.")
+				log.Info().Msg("Health monitor stopped.")
 				return
 			}
 		}

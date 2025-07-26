@@ -2,16 +2,15 @@ package worker
 
 import (
 	"context"
-	"errors"
-	"log"
 	"sync"
 	"time"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/diogomassis/rinha-2025/internal/env"
 	"github.com/diogomassis/rinha-2025/internal/models"
 	"github.com/diogomassis/rinha-2025/internal/services/cache"
 	"github.com/diogomassis/rinha-2025/internal/services/orchestrator"
-	"github.com/redis/go-redis/v9"
 )
 
 type RinhaWorker struct {
@@ -19,6 +18,7 @@ type RinhaWorker struct {
 	redisQueue          *cache.RinhaRedisQueueService
 	redisPersistence    *cache.RinhaRedisPersistenceService
 	paymentOrchestrator *orchestrator.RinhaPaymentOrchestrator
+	mainQueueChannel    <-chan models.RinhaPendingPayment
 
 	waitGroup  *sync.WaitGroup
 	cancelFunc context.CancelFunc
@@ -29,25 +29,27 @@ func NewRinhaWorker(
 	redisQueue *cache.RinhaRedisQueueService,
 	redisPersistence *cache.RinhaRedisPersistenceService,
 	paymentOrchestrator *orchestrator.RinhaPaymentOrchestrator,
+	mainQueueChannel <-chan models.RinhaPendingPayment,
 ) *RinhaWorker {
 	return &RinhaWorker{
 		numWorkers:          numWorkers,
 		redisQueue:          redisQueue,
 		redisPersistence:    redisPersistence,
 		paymentOrchestrator: paymentOrchestrator,
+		mainQueueChannel:    mainQueueChannel,
 		waitGroup:           &sync.WaitGroup{},
 	}
 }
 
 func (rw *RinhaWorker) Start() {
-	log.Printf("[worker] Starting %d workers for queue: %s", rw.numWorkers, env.Env.RedisQueueName)
+	log.Info().Int("numWorkers", rw.numWorkers).Str("queue", env.Env.RedisQueueName).Msg("Starting workers")
 
 	var ctx context.Context
 	ctx, rw.cancelFunc = context.WithCancel(context.Background())
 
 	for i := 1; i <= rw.numWorkers; i++ {
 		rw.waitGroup.Add(i)
-		go rw.worker(ctx, i)
+		go rw.worker(ctx)
 	}
 }
 
@@ -55,26 +57,20 @@ func (rw *RinhaWorker) Stop() {
 	if rw.cancelFunc != nil {
 		rw.cancelFunc()
 	}
-
 	rw.waitGroup.Wait()
 }
 
-func (rw *RinhaWorker) worker(ctx context.Context, id int) {
+func (rw *RinhaWorker) worker(ctx context.Context) {
 	defer rw.waitGroup.Done()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		default:
-			data, err := rw.redisQueue.PopFromQueue(ctx)
-			if err != nil {
-				if errors.Is(err, context.Canceled) || errors.Is(err, redis.Nil) {
-					continue
-				}
-				continue
+		case data := <-rw.mainQueueChannel:
+			if err := rw.processPayment(ctx, data); err != nil {
+				log.Error().Err(err).Str("correlationId", data.CorrelationId).Msg("Error processing payment")
 			}
-			rw.processPayment(ctx, *data)
 		}
 	}
 }

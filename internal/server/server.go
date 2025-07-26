@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -18,30 +17,28 @@ type RinhaServer struct {
 	pb.PaymentServiceServer
 	redisQueue       *cache.RinhaRedisQueueService
 	redisPersistence *cache.RinhaRedisPersistenceService
+	mainQueueChannel chan<- models.RinhaPendingPayment
 }
 
-func NewRinhaServer(redisQueue *cache.RinhaRedisQueueService, redisPersistence *cache.RinhaRedisPersistenceService) *RinhaServer {
+func NewRinhaServer(redisQueue *cache.RinhaRedisQueueService, redisPersistence *cache.RinhaRedisPersistenceService, mainQueueChannel chan<- models.RinhaPendingPayment) *RinhaServer {
 	return &RinhaServer{
 		redisQueue:       redisQueue,
 		redisPersistence: redisPersistence,
+		mainQueueChannel: mainQueueChannel,
 	}
 }
 
 func (s *RinhaServer) Payments(ctx context.Context, in *pb.PaymentRequest) (*pb.PaymentResponse, error) {
 	pendingPayment := models.NewRinhaPendingPayment(in.CorrelationId, in.Amount)
-	err := s.redisQueue.AddToQueue(ctx, *pendingPayment)
-	if err != nil {
-		log.Printf("[server][error] unable to queue payment (correlation_id=%s, amount=%.2f): %v", in.CorrelationId, in.Amount, err)
+	select {
+	case s.mainQueueChannel <- *pendingPayment:
 		return &pb.PaymentResponse{
-			Code:    http.StatusBadRequest,
-			Message: err.Error(),
+			Code:    http.StatusCreated,
+			Message: "payment queued for processing",
 		}, nil
+	default:
+		return nil, status.Error(codes.ResourceExhausted, "server is busy, please try again later")
 	}
-
-	return &pb.PaymentResponse{
-		Code:    http.StatusCreated,
-		Message: "Payment queued for processing",
-	}, nil
 }
 
 func (s *RinhaServer) PaymentsSummary(ctx context.Context, in *pb.PaymentsSummaryRequest) (*pb.PaymentsSummaryResponse, error) {
