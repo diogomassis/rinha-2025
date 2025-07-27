@@ -17,7 +17,7 @@ services:
           memory: "40MB"
 
   backend-1:
-    image: rinha-2025
+    image: ghcr.io/diogomassis/rinha-2025:v1.0.4
     environment:
       - APP_PORT=8080
       - INSTANCE_ID=backend-1
@@ -39,7 +39,7 @@ services:
     restart: unless-stopped
 
   backend-2:
-    image: rinha-2025
+    image: ghcr.io/diogomassis/rinha-2025:v1.0.4
     environment:
       - APP_PORT=8080
       - INSTANCE_ID=backend-2
