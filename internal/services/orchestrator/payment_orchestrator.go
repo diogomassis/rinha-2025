@@ -22,10 +22,10 @@ type candidateProcessor struct {
 
 type RinhaPaymentOrchestrator struct {
 	processors    []processor.PaymentProcessor
-	healthMonitor *health.RinhaMonitor
+	healthMonitor *health.RinhaHealthCheckerMonitor
 }
 
-func NewRinhaPaymentOrchestrator(healthMonitor *health.RinhaMonitor, processors ...processor.PaymentProcessor) *RinhaPaymentOrchestrator {
+func NewRinhaPaymentOrchestrator(healthMonitor *health.RinhaHealthCheckerMonitor, processors ...processor.PaymentProcessor) *RinhaPaymentOrchestrator {
 	return &RinhaPaymentOrchestrator{
 		processors:    processors,
 		healthMonitor: healthMonitor,

@@ -9,33 +9,33 @@ import (
 	"github.com/diogomassis/rinha-2025/internal/services/processor"
 )
 
-type RinhaMonitor struct {
+type RinhaHealthCheckerMonitor struct {
 	processors []processor.PaymentProcessor
 	cache      map[string]processor.HealthStatus
 	mutex      sync.RWMutex
 	stopChan   chan struct{}
 }
 
-func NewMonitor(processors ...processor.PaymentProcessor) *RinhaMonitor {
-	return &RinhaMonitor{
+func NewRinhaHealthCheckerMonitor(processors ...processor.PaymentProcessor) *RinhaHealthCheckerMonitor {
+	return &RinhaHealthCheckerMonitor{
 		processors: processors,
 		cache:      make(map[string]processor.HealthStatus),
 		stopChan:   make(chan struct{}),
 	}
 }
 
-func (m *RinhaMonitor) GetStatus(processorName string) (processor.HealthStatus, bool) {
+func (m *RinhaHealthCheckerMonitor) GetStatus(processorName string) (processor.HealthStatus, bool) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 	status, found := m.cache[processorName]
 	return status, found
 }
 
-func (m *RinhaMonitor) Stop() {
+func (m *RinhaHealthCheckerMonitor) Stop() {
 	close(m.stopChan)
 }
 
-func (m *RinhaMonitor) Start() {
+func (m *RinhaHealthCheckerMonitor) Start() {
 	log.Info().Msg("Starting health monitor...")
 	ticker := time.NewTicker(5 * time.Second)
 	go func() {
@@ -53,7 +53,7 @@ func (m *RinhaMonitor) Start() {
 	}()
 }
 
-func (m *RinhaMonitor) checkAllProcessors() {
+func (m *RinhaHealthCheckerMonitor) checkAllProcessors() {
 	for _, p := range m.processors {
 		status, err := p.CheckHealth()
 		if err != nil {
@@ -64,7 +64,7 @@ func (m *RinhaMonitor) checkAllProcessors() {
 	}
 }
 
-func (m *RinhaMonitor) updateStatus(name string, status processor.HealthStatus) {
+func (m *RinhaHealthCheckerMonitor) updateStatus(name string, status processor.HealthStatus) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.cache[name] = status

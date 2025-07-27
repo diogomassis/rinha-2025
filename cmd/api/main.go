@@ -65,7 +65,7 @@ func main() {
 	processorDefault := processor.NewHTTPPaymentProcessor("default", env.Env.PaymentDefaultEndpoint)
 	processorFallback := processor.NewHTTPPaymentProcessor("fallback", env.Env.PaymentFallbackEndpoint)
 
-	healthMonitor := health.NewMonitor(processorDefault, processorFallback)
+	healthMonitor := health.NewRinhaHealthCheckerMonitor(processorDefault, processorFallback)
 	go healthMonitor.Start()
 
 	paymentOrchestrator := orchestrator.NewRinhaPaymentOrchestrator(healthMonitor, processorDefault, processorFallback)
