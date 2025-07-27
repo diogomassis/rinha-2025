@@ -24,6 +24,7 @@ var (
 func Load() {
 	Env = &EnvironmentVariables{
 		Port:                    getRequiredEnv("APP_PORT"),
+		RedisAddr:               getRequiredEnv("REDIS_URL"),
 		InstanceName:            getOptionalEnv("INSTANCE_ID", "backend-"+uuid.NewString()),
 		PaymentDefaultEndpoint:  getRequiredEnv("PROCESSOR_DEFAULT_URL"),
 		PaymentFallbackEndpoint: getRequiredEnv("PROCESSOR_FALLBACK_URL"),
@@ -43,6 +44,9 @@ func getOptionalEnv(key, fallback string) string {
 	value := os.Getenv(key)
 	if value != "" {
 		return value
+	}
+	if fallback == "" {
+		log.Warn().Str("key", key).Msg("Optional environment variable not set and no fallback provided")
 	}
 	return fallback
 }
