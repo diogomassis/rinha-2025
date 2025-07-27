@@ -4,6 +4,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
 
@@ -23,8 +24,7 @@ var (
 func Load() {
 	Env = &EnvironmentVariables{
 		Port:                    getRequiredEnv("APP_PORT"),
-		RedisAddr:               getRequiredEnv("REDIS_URL"),
-		InstanceName:            getRequiredEnv("INSTANCE_ID"),
+		InstanceName:            getOptionalEnv("INSTANCE_ID", "backend-"+uuid.NewString()),
 		PaymentDefaultEndpoint:  getRequiredEnv("PROCESSOR_DEFAULT_URL"),
 		PaymentFallbackEndpoint: getRequiredEnv("PROCESSOR_FALLBACK_URL"),
 		WorkerConcurrency:       getRequiredEnvInt("WORKER_CONCURRENCY"),
@@ -37,6 +37,14 @@ func getRequiredEnv(key string) string {
 		log.Fatal().Str("key", key).Msg("Required environment variable is not set")
 	}
 	return value
+}
+
+func getOptionalEnv(key, fallback string) string {
+	value := os.Getenv(key)
+	if value != "" {
+		return value
+	}
+	return fallback
 }
 
 func getRequiredEnvInt(key string) int {
