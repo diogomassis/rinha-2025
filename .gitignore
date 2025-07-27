@@ -6,3 +6,6 @@
 
 # Ignore all files and directories inside the bin/ folder
 bin/
+
+# Ignore .env file
+.env
