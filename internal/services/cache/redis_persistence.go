@@ -40,12 +40,12 @@ func (r *RinhaRedisPersistenceService) Get(ctx context.Context, from, to time.Ti
 	var err error
 	summary.Default, err = r.getSummaryForType(ctx, "default", from, to)
 	if err != nil {
-		return nil, fmt.Errorf("falha ao buscar resumo 'default': %w", err)
+		return nil, fmt.Errorf("failed to fetch 'default' summary: %w", err)
 	}
 
 	summary.Fallback, err = r.getSummaryForType(ctx, "fallback", from, to)
 	if err != nil {
-		return nil, fmt.Errorf("falha ao buscar resumo 'fallback': %w", err)
+		return nil, fmt.Errorf("failed to fetch 'fallback' summary: %w", err)
 	}
 	return summary, nil
 }
