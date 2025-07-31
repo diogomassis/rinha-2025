@@ -11,5 +11,6 @@ type PaymentRequest struct {
 type PaymentResponse struct {
 	CorrelationID string    `json:"correlationId"`
 	Amount        float64   `json:"amount"`
+	Processor     string    `json:"processor"`
 	RequestedAt   time.Time `json:"requestedAt"`
 }

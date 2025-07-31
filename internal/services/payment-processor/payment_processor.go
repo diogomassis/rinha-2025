@@ -50,6 +50,7 @@ func (p *PaymentProcessor) ProcessPayment(request *PaymentRequest) (*PaymentResp
 	return &PaymentResponse{
 		CorrelationID: request.CorrelationID,
 		Amount:        request.Amount,
+		Processor:     p.name,
 		RequestedAt:   request.RequestedAt,
 	}, nil
 }
