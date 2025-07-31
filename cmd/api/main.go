@@ -2,162 +2,91 @@ package main
 
 import (
 	"context"
-	"errors"
-	"net"
-	"net/http"
-	"os/signal"
-	"strings"
-	"sync"
-	"syscall"
-	"time"
-
-	"github.com/rs/zerolog/log"
+	"log"
 
 	"github.com/diogomassis/rinha-2025/internal/env"
-	"github.com/diogomassis/rinha-2025/internal/models"
-	pb "github.com/diogomassis/rinha-2025/internal/proto"
-	"github.com/diogomassis/rinha-2025/internal/server"
-	"github.com/diogomassis/rinha-2025/internal/services/cache"
-	"github.com/diogomassis/rinha-2025/internal/services/health"
-	"github.com/diogomassis/rinha-2025/internal/services/orchestrator"
-	"github.com/diogomassis/rinha-2025/internal/services/processor"
-	"github.com/diogomassis/rinha-2025/internal/services/requeuer"
-	"github.com/diogomassis/rinha-2025/internal/services/worker"
-	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"github.com/redis/go-redis/v9"
-	"github.com/rs/zerolog"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/reflection"
+	"github.com/gofiber/fiber/v2"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var addr string = "0.0.0.0:3030"
+type PaymentRequest struct {
+	CorrelationID string  `json:"correlationId"`
+	Amount        float64 `json:"amount"`
+}
+
+type SummaryResponse struct {
+	Default  Summary `json:"default"`
+	Fallback Summary `json:"fallback"`
+}
+
+type Summary struct {
+	TotalRequests int     `json:"totalRequests"`
+	TotalAmount   float64 `json:"totalAmount"`
+}
+
+var db *pgxpool.Pool
 
 func main() {
 	env.Load()
 
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
-	redisConn := redis.NewClient(&redis.Options{
-		Addr:         env.Env.RedisAddr,
-		Password:     "",
-		DB:           0,
-		PoolSize:     200,
-		MinIdleConns: 20,
-		DialTimeout:  10 * time.Second,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		PoolTimeout:  10 * time.Second,
-	})
-	if pong, err := redisConn.Ping(ctx).Result(); err != nil {
-		log.Fatal().Err(err).Msg("Redis ping failed")
-	} else {
-		log.Info().Str("pong", pong).Msg("Redis connected successfully")
-	}
-
-	pendingPaymentChan := make(chan models.RinhaPendingPayment, 30000)
-	retryPaymentChan := make(chan models.RinhaPendingPayment, 30000)
-	redisPersistence := cache.NewRinhaRedisPersistenceService(redisConn)
-
-	processorDefault := processor.NewHTTPPaymentProcessor("default", env.Env.PaymentDefaultEndpoint)
-	processorFallback := processor.NewHTTPPaymentProcessor("fallback", env.Env.PaymentFallbackEndpoint)
-
-	healthMonitor := health.NewRinhaHealthCheckerMonitor(processorDefault, processorFallback)
-	go healthMonitor.Start()
-
-	paymentOrchestrator := orchestrator.NewRinhaPaymentOrchestrator(healthMonitor, processorDefault, processorFallback)
-
-	paymentRequeuer := requeuer.NewRinhaRequeuer(retryPaymentChan, pendingPaymentChan)
-	go paymentRequeuer.Start()
-
-	workerPool, err := worker.NewRinhaWorkerBuilder().
-		WithNumWorkers(env.Env.WorkerConcurrency).
-		WithRedisPersistence(redisPersistence).
-		WithPaymentOrchestrator(paymentOrchestrator).
-		WithPendingPaymentChannel(pendingPaymentChan).
-		WithRetryPaymentChannel(retryPaymentChan).
-		Build()
+	var err error
+	ctx := context.Background()
+	db, err = pgxpool.New(ctx, env.Env.DbUrl)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to build worker pool")
+		log.Fatal("failed to connect to DB:", err)
 	}
-	go workerPool.Start()
+	defer db.Close()
 
-	var wg sync.WaitGroup
+	app := fiber.New()
 
-	grpcServer := grpc.NewServer()
-	pb.RegisterPaymentServiceServer(grpcServer, server.NewRinhaServer(redisPersistence, pendingPaymentChan))
-	reflection.Register(grpcServer)
+	app.Post("/payments", handlePostPayment)
+	app.Get("/payments-summary", handleGetSummary)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		lis, err := net.Listen("tcp", addr)
-		if err != nil {
-			log.Fatal().Err(err).Msg("failed to listen")
-		}
-		log.Info().Str("addr", addr).Msg("gRPC server listening")
-		if err := grpcServer.Serve(lis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
-			log.Fatal().Err(err).Msg("gRPC server failed")
-		}
-	}()
-
-	mux := runtime.NewServeMux()
-	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
-	if err := pb.RegisterPaymentServiceHandlerFromEndpoint(ctx, mux, addr, opts); err != nil {
-		log.Fatal().Err(err).Msg("failed to register gateway")
-	}
-	port := ":" + env.Env.Port
-	httpServer := &http.Server{Addr: port, Handler: grpcHandlerFunc(grpcServer, newGatewayMux(ctx))}
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		log.Info().Str("instance", env.Env.InstanceName).Str("port", port).Msg("HTTP gateway listening")
-		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatal().Err(err).Msg("HTTP gateway failed")
-		}
-	}()
-
-	<-ctx.Done()
-	log.Info().Msg("Shutdown signal received. Gracefully shutting down...")
-
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer shutdownCancel()
-
-	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		log.Error().Err(err).Msg("HTTP server shutdown error")
-	}
-
-	close(pendingPaymentChan)
-	close(retryPaymentChan)
-
-	healthMonitor.Stop()
-	paymentRequeuer.Stop()
-	workerPool.Wait()
-	redisConn.Close()
-
-	wg.Wait()
-	log.Info().Msg("Application terminated successfully.")
+	log.Fatal(app.Listen(":" + env.Env.Port))
 }
 
-func newGatewayMux(ctx context.Context) http.Handler {
-	mux := runtime.NewServeMux()
-	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
-	if err := pb.RegisterPaymentServiceHandlerFromEndpoint(ctx, mux, addr, opts); err != nil {
-		log.Fatal().Err(err).Msg("Failed to register gateway")
+func handlePostPayment(c *fiber.Ctx) error {
+	var req PaymentRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid JSON")
 	}
-	return mux
+
+	if req.CorrelationID == "" || req.Amount <= 0 {
+		return fiber.NewError(fiber.StatusBadRequest, "missing or invalid fields")
+	}
+
+	_, err := db.Exec(c.Context(), `
+		INSERT INTO payments (correlation_id, amount, processor, created_at)
+		VALUES ($1, $2, $3, now())`,
+		req.CorrelationID, req.Amount, "default")
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "DB error")
+	}
+
+	return c.SendStatus(fiber.StatusAccepted)
 }
 
-func grpcHandlerFunc(grpcServer *grpc.Server, otherHandler http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
-			grpcServer.ServeHTTP(w, r)
-		} else {
-			otherHandler.ServeHTTP(w, r)
-		}
-	})
+func handleGetSummary(c *fiber.Ctx) error {
+	ctx := c.Context()
+	var res SummaryResponse
+
+	err := db.QueryRow(ctx, `
+		SELECT COUNT(*), COALESCE(SUM(amount), 0)
+		FROM payments
+		WHERE processor = 'default'`,
+	).Scan(&res.Default.TotalRequests, &res.Default.TotalAmount)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "DB error")
+	}
+
+	err = db.QueryRow(ctx, `
+		SELECT COUNT(*), COALESCE(SUM(amount), 0)
+		FROM payments
+		WHERE processor = 'fallback'`,
+	).Scan(&res.Fallback.TotalRequests, &res.Fallback.TotalAmount)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "DB error")
+	}
+
+	return c.JSON(res)
 }
