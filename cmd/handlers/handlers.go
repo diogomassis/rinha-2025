@@ -4,8 +4,6 @@ import (
 	"time"
 
 	"github.com/diogomassis/rinha-2025/internal/dto"
-	chooserchecker "github.com/diogomassis/rinha-2025/internal/services/chooser-checker"
-	healthchecker "github.com/diogomassis/rinha-2025/internal/services/health-checker"
 	paymentprocessor "github.com/diogomassis/rinha-2025/internal/services/payment-processor"
 	"github.com/diogomassis/rinha-2025/internal/services/persistence"
 	"github.com/diogomassis/rinha-2025/internal/services/worker"
@@ -13,10 +11,8 @@ import (
 )
 
 var (
-	Chooser       *chooserchecker.ChooserService
-	HealthChecker *healthchecker.HealthChecker
-	Persistence   *persistence.PaymentPersistenceService
-	Worker        *worker.Worker
+	Persistence *persistence.PaymentPersistenceService
+	Worker      *worker.Worker
 )
 
 func HandlePostPayment(c *fiber.Ctx) error {

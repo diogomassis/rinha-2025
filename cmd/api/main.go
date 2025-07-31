@@ -49,9 +49,8 @@ func main() {
 	workerPool.Start()
 	defer workerPool.Stop()
 
-	handlers.HealthChecker = healthChecker
-	handlers.Chooser = chooserChecker
 	handlers.Persistence = paymentPersistenceService
+	handlers.Worker = workerPool
 
 	app := fiber.New()
 	app.Post("/payments", handlers.HandlePostPayment)
