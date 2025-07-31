@@ -23,9 +23,10 @@ func main() {
 	env.Load()
 
 	handlers.Monitor = healthchecker.New()
-	handlers.Chooser = chooserchecker.New(handlers.Monitor)
 	handlers.Monitor.Start()
 	defer handlers.Monitor.Stop()
+
+	handlers.Chooser = chooserchecker.New(handlers.Monitor)
 
 	config, err := pgxpool.ParseConfig(env.Env.DbUrl)
 	if err != nil {
