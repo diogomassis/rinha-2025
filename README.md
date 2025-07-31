@@ -11,7 +11,6 @@ To access the challenge details, visit: [Rinha de Backend - 2025](https://github
 ## Technology
 
 - **Golang**: The primary programming language used for developing the backend services.
-- **gRPC**: Remote procedure call framework used for communication between services.
 - **Docker**: Containerization platform used for packaging the application and its dependencies.
-- **Redis**: In-memory data structure store used as a database, cache, and message broker.
+- **PostgreSQL**: Relational database management system used for storing and managing application data.
 - **Nginx**: Web server used as a reverse proxy and load balancer for the backend services.
