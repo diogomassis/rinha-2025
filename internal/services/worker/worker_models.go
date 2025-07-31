@@ -3,5 +3,5 @@ package worker
 import paymentprocessor "github.com/diogomassis/rinha-2025/internal/services/payment-processor"
 
 type PaymentJob struct {
-	requestPayment *paymentprocessor.PaymentRequest
+	RequestPayment *paymentprocessor.PaymentRequest
 }

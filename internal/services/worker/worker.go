@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -59,7 +60,7 @@ func (w *Worker) paymentProcessor() {
 		if !ok {
 			continue
 		}
-		paymentResponse, err := processor.ProcessPayment(job.requestPayment)
+		paymentResponse, err := processor.ProcessPayment(job.RequestPayment)
 		if err != nil {
 			continue
 		}
@@ -70,21 +71,23 @@ func (w *Worker) paymentProcessor() {
 	}
 }
 
-func (w *Worker) AddPaymentJob(requestPayment *paymentprocessor.PaymentRequest) {
+func (w *Worker) AddPaymentJob(requestPayment *paymentprocessor.PaymentRequest) error {
 	job := &PaymentJob{
-		requestPayment: requestPayment,
+		RequestPayment: requestPayment,
 	}
 	select {
 	case w.paymentRequestCh <- job:
+		return nil
 	default:
 		maxRetries := 3
 		for i := 0; i < maxRetries; i++ {
 			select {
 			case w.paymentRequestCh <- job:
-				return
+				return nil
 			default:
 				time.Sleep(50 * time.Millisecond)
 			}
 		}
+		return fmt.Errorf("failed to enqueue payment job after %d retries", maxRetries)
 	}
 }
