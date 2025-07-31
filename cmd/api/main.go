@@ -22,10 +22,10 @@ var (
 func main() {
 	env.Load()
 
-	monitor = healthchecker.New()
-	chooser = chooserchecker.New(monitor)
-	monitor.Start()
-	defer monitor.Stop()
+	handlers.Monitor = healthchecker.New()
+	handlers.Chooser = chooserchecker.New(handlers.Monitor)
+	handlers.Monitor.Start()
+	defer handlers.Monitor.Stop()
 
 	config, err := pgxpool.ParseConfig(env.Env.DbUrl)
 	if err != nil {
@@ -38,11 +38,11 @@ func main() {
 	config.HealthCheckPeriod = 30 * time.Second
 
 	ctx := context.Background()
-	db, err = pgxpool.NewWithConfig(ctx, config)
+	handlers.Db, err = pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		log.Fatal("Failed to connect to DB with optimized config:", err)
 	}
-	defer db.Close()
+	defer handlers.Db.Close()
 
 	app := fiber.New()
 	app.Post("/payments", handlers.HandlePostPayment)
