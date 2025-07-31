@@ -15,11 +15,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// CONFIGURAR O BANCO DE DADOS PARA AGUENTAR ALTA CARGA
-// IMPLEMENTAR O WORKER PULL E ENVIAR PAGAMENTOS DA API PARA O WORKER
-// WORKER PULL VAI CONSUMIR PAGAMENTOS DE CHANNELS, OS PROCESSADOS COM SUCESSO VÃO SER PERSISTIDOS
-
-// IMPLEMENTAR O ENDPOINT DE PAGAMENTO
 // IMPLEMENTAR O ENDPOINT DE RESUMO DE PAGAMENTOS
 
 func main() {
@@ -54,7 +49,7 @@ func main() {
 	workerPool.Start()
 	defer workerPool.Stop()
 
-	handlers.Monitor = healthChecker
+	handlers.HealthChecker = healthChecker
 	handlers.Chooser = chooserChecker
 	handlers.Persistence = paymentPersistenceService
 
