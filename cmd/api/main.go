@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/diogomassis/rinha-2025/internal/dto"
+	"github.com/diogomassis/rinha-2025/cmd/handlers"
 	"github.com/diogomassis/rinha-2025/internal/env"
 	chooserchecker "github.com/diogomassis/rinha-2025/internal/services/chooser-checker"
 	healthchecker "github.com/diogomassis/rinha-2025/internal/services/health-checker"
@@ -45,18 +45,8 @@ func main() {
 	defer db.Close()
 
 	app := fiber.New()
-
-	app.Post("/payments", handlePostPayment)
-	app.Get("/payments-summary", handleGetSummary)
+	app.Post("/payments", handlers.HandlePostPayment)
+	app.Get("/payments-summary", handlers.HandleGetSummary)
 
 	log.Fatal(app.Listen(":" + env.Env.Port))
-}
-
-func handlePostPayment(c *fiber.Ctx) error {
-	return c.SendStatus(fiber.StatusAccepted)
-}
-
-func handleGetSummary(c *fiber.Ctx) error {
-	var res dto.PaymentSummaryResponse
-	return c.JSON(res)
 }
