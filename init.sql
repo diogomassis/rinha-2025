@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS payments (
     correlation_id UUID PRIMARY KEY,
-    amount INTEGER NOT NULL,
+    amount NUMERIC(10, 2) NOT NULL,
     processor CHAR(1) NOT NULL CHECK,
     requested_at TIMESTAMPTZ NOT NULL
 );
