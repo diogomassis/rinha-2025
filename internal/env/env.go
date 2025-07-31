@@ -4,17 +4,12 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
 
 type EnvironmentVariables struct {
-	Port                    string
-	RedisAddr               string
-	InstanceName            string
-	PaymentDefaultEndpoint  string
-	PaymentFallbackEndpoint string
-	WorkerConcurrency       int
+	Port  string
+	DbUrl string
 }
 
 var (
@@ -23,12 +18,8 @@ var (
 
 func Load() {
 	Env = &EnvironmentVariables{
-		Port:                    getRequiredEnv("APP_PORT"),
-		RedisAddr:               getRequiredEnv("REDIS_URL"),
-		InstanceName:            getOptionalEnv("INSTANCE_ID", "backend-"+uuid.NewString()),
-		PaymentDefaultEndpoint:  getRequiredEnv("PROCESSOR_DEFAULT_URL"),
-		PaymentFallbackEndpoint: getRequiredEnv("PROCESSOR_FALLBACK_URL"),
-		WorkerConcurrency:       getRequiredEnvInt("WORKER_CONCURRENCY"),
+		Port:  getRequiredEnv("APP_PORT"),
+		DbUrl: getRequiredEnv("DB_URL"),
 	}
 }
 
