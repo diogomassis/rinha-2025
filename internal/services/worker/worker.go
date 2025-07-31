@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/diogomassis/rinha-2025/internal/env"
-	"github.com/diogomassis/rinha-2025/internal/persistence"
 	chooserchecker "github.com/diogomassis/rinha-2025/internal/services/chooser-checker"
 	paymentprocessor "github.com/diogomassis/rinha-2025/internal/services/payment-processor"
+	"github.com/diogomassis/rinha-2025/internal/services/persistence"
 )
 
 var (
@@ -64,11 +64,24 @@ func (w *Worker) paymentProcessor() {
 		if err != nil {
 			continue
 		}
-		err = w.db.SavePayment(paymentResponse)
-		if err != nil {
-			continue
+		rowsAffected, err := w.db.SavePayment(paymentResponse)
+		if err != nil || rowsAffected == 0 {
+			go w.retryPersistPayment(paymentResponse) // <- Remember to review this retry logic
 		}
 	}
+}
+
+func (w *Worker) retryPersistPayment(paymentResponse *paymentprocessor.PaymentResponse) (int64, error) {
+	var rowsAffected int64
+	var err error
+	for i := 0; i < 3; i++ {
+		rowsAffected, err = w.db.SavePayment(paymentResponse)
+		if err == nil && rowsAffected > 0 {
+			return rowsAffected, nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return 0, err
 }
 
 func (w *Worker) AddPaymentJob(requestPayment *paymentprocessor.PaymentRequest) error {
