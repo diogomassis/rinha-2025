@@ -4,10 +4,10 @@ import (
 	"time"
 
 	"github.com/diogomassis/rinha-2025/internal/dto"
-	"github.com/diogomassis/rinha-2025/internal/persistence"
 	chooserchecker "github.com/diogomassis/rinha-2025/internal/services/chooser-checker"
 	healthchecker "github.com/diogomassis/rinha-2025/internal/services/health-checker"
 	paymentprocessor "github.com/diogomassis/rinha-2025/internal/services/payment-processor"
+	"github.com/diogomassis/rinha-2025/internal/services/persistence"
 	"github.com/diogomassis/rinha-2025/internal/services/worker"
 	"github.com/gofiber/fiber/v2"
 )

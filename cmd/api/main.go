@@ -7,9 +7,9 @@ import (
 
 	"github.com/diogomassis/rinha-2025/cmd/handlers"
 	"github.com/diogomassis/rinha-2025/internal/env"
-	"github.com/diogomassis/rinha-2025/internal/persistence"
 	chooserchecker "github.com/diogomassis/rinha-2025/internal/services/chooser-checker"
 	healthchecker "github.com/diogomassis/rinha-2025/internal/services/health-checker"
+	"github.com/diogomassis/rinha-2025/internal/services/persistence"
 	"github.com/diogomassis/rinha-2025/internal/services/worker"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
