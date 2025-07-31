@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"time"
 
 	"github.com/diogomassis/rinha-2025/internal/dto"
 	"github.com/diogomassis/rinha-2025/internal/env"
@@ -26,10 +27,20 @@ func main() {
 	monitor.Start()
 	defer monitor.Stop()
 
-	ctx := context.Background()
-	db, err := pgxpool.New(ctx, env.Env.DbUrl)
+	config, err := pgxpool.ParseConfig(env.Env.DbUrl)
 	if err != nil {
-		log.Fatal("failed to connect to DB:", err)
+		log.Fatal("Failed to parse database URL:", err)
+	}
+	config.MaxConns = 30
+	config.MinConns = 10
+	config.MaxConnLifetime = 5 * time.Minute
+	config.MaxConnIdleTime = 1 * time.Minute
+	config.HealthCheckPeriod = 30 * time.Second
+
+	ctx := context.Background()
+	db, err = pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		log.Fatal("Failed to connect to DB with optimized config:", err)
 	}
 	defer db.Close()
 
