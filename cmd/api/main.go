@@ -7,26 +7,29 @@ import (
 
 	"github.com/diogomassis/rinha-2025/cmd/handlers"
 	"github.com/diogomassis/rinha-2025/internal/env"
+	"github.com/diogomassis/rinha-2025/internal/persistence"
 	chooserchecker "github.com/diogomassis/rinha-2025/internal/services/chooser-checker"
 	healthchecker "github.com/diogomassis/rinha-2025/internal/services/health-checker"
+	"github.com/diogomassis/rinha-2025/internal/services/worker"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var (
-	db      *pgxpool.Pool
-	monitor *healthchecker.HealthChecker
-	chooser *chooserchecker.ChooserService
-)
+// CONFIGURAR O BANCO DE DADOS PARA AGUENTAR ALTA CARGA
+// IMPLEMENTAR O WORKER PULL E ENVIAR PAGAMENTOS DA API PARA O WORKER
+// WORKER PULL VAI CONSUMIR PAGAMENTOS DE CHANNELS, OS PROCESSADOS COM SUCESSO VÃO SER PERSISTIDOS
+
+// IMPLEMENTAR O ENDPOINT DE PAGAMENTO
+// IMPLEMENTAR O ENDPOINT DE RESUMO DE PAGAMENTOS
 
 func main() {
 	env.Load()
 
-	handlers.Monitor = healthchecker.New()
-	handlers.Monitor.Start()
-	defer handlers.Monitor.Stop()
+	healthChecker := healthchecker.New()
+	healthChecker.Start()
+	defer healthChecker.Stop()
 
-	handlers.Chooser = chooserchecker.New(handlers.Monitor)
+	chooserChecker := chooserchecker.New(healthChecker)
 
 	config, err := pgxpool.ParseConfig(env.Env.DbUrl)
 	if err != nil {
@@ -39,11 +42,21 @@ func main() {
 	config.HealthCheckPeriod = 30 * time.Second
 
 	ctx := context.Background()
-	handlers.Db, err = pgxpool.NewWithConfig(ctx, config)
+	db, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		log.Fatal("Failed to connect to DB with optimized config:", err)
 	}
-	defer handlers.Db.Close()
+	defer db.Close()
+
+	paymentPersistenceService := persistence.NewPaymentPersistenceService(db)
+
+	workerPool := worker.New(chooserChecker, paymentPersistenceService)
+	workerPool.Start()
+	defer workerPool.Stop()
+
+	handlers.Monitor = healthChecker
+	handlers.Chooser = chooserChecker
+	handlers.Persistence = paymentPersistenceService
 
 	app := fiber.New()
 	app.Post("/payments", handlers.HandlePostPayment)
