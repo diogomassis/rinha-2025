@@ -8,10 +8,12 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/diogomassis/rinha-2025/internal/env"
 )
 
 type ServiceStatus struct {
-	available       int32
+	available       bool
 	minResponseTime int
 	failureCount    int32
 	lastFailure     time.Time
@@ -48,23 +50,23 @@ func New() *HealthChecker {
 }
 
 func (hm *HealthChecker) Start() {
-	log.Println("Starting health monitoring...")
 	hm.setServiceStatus(hm.defaultService, false, 0)
 	hm.setServiceStatus(hm.fallbackService, false, 0)
 	ticker := time.NewTicker(6 * time.Second)
-	defer ticker.Stop()
 
-	for {
-		select {
-		case <-ticker.C:
-			go hm.checkService("default", "http://payment-processor-default:8080", hm.defaultService)
-			go hm.checkService("fallback", "http://payment-processor-fallback:8080", hm.fallbackService)
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				go hm.checkService("d", env.Env.ProcessorDefaultUrl, hm.defaultService)
+				go hm.checkService("f", env.Env.ProcessorFallbackUrl, hm.fallbackService)
 
-		case <-hm.quit:
-			log.Println("Stopping health monitoring...")
-			return
+			case <-hm.quit:
+				ticker.Stop()
+				return
+			}
 		}
-	}
+	}()
 }
 
 func (hm *HealthChecker) Stop() {
@@ -88,11 +90,9 @@ func (hm *HealthChecker) GetFallbackMinResponseTime() int {
 }
 
 func (hm *HealthChecker) RegisterServiceFailure(serviceName string) {
-	var service *ServiceStatus
-	if serviceName == "default" {
-		service = hm.defaultService
-	} else {
-		service = hm.fallbackService
+	service := hm.getServiceByName(serviceName)
+	if service == nil {
+		return
 	}
 
 	atomic.AddInt32(&service.failureCount, 1)
@@ -102,13 +102,10 @@ func (hm *HealthChecker) RegisterServiceFailure(serviceName string) {
 }
 
 func (hm *HealthChecker) RegisterServiceSuccess(serviceName string) {
-	var service *ServiceStatus
-	if serviceName == "default" {
-		service = hm.defaultService
-	} else {
-		service = hm.fallbackService
+	service := hm.getServiceByName(serviceName)
+	if service == nil {
+		return
 	}
-
 	atomic.StoreInt32(&service.failureCount, 0)
 }
 
@@ -117,12 +114,16 @@ func (hm *HealthChecker) isServiceAvailable(service *ServiceStatus) bool {
 		service.mutex.RLock()
 		lastFailure := service.lastFailure
 		service.mutex.RUnlock()
+
 		if time.Since(lastFailure) < 60*time.Second {
 			return false
 		}
 		atomic.StoreInt32(&service.failureCount, 0)
 	}
-	return atomic.LoadInt32(&service.available) == 1
+	service.mutex.RLock()
+	isAvailable := service.available
+	service.mutex.RUnlock()
+	return isAvailable
 }
 
 func (hm *HealthChecker) getMinResponseTime(service *ServiceStatus) int {
@@ -134,41 +135,42 @@ func (hm *HealthChecker) getMinResponseTime(service *ServiceStatus) int {
 func (hm *HealthChecker) setServiceStatus(service *ServiceStatus, available bool, minResponseTime int) {
 	service.mutex.Lock()
 	defer service.mutex.Unlock()
-	if available {
-		atomic.StoreInt32(&service.available, 1)
-	} else {
-		atomic.StoreInt32(&service.available, 0)
-	}
+
+	service.available = available
 	service.minResponseTime = minResponseTime
+}
+
+func (hm *HealthChecker) getServiceByName(name string) *ServiceStatus {
+	if name == "d" {
+		return hm.defaultService
+	}
+	if name == "f" {
+		return hm.fallbackService
+	}
+	return nil
 }
 
 func (hm *HealthChecker) checkService(serviceName, baseURL string, service *ServiceStatus) {
 	url := fmt.Sprintf("%s/payments/service-health", baseURL)
 	resp, err := hm.client.Get(url)
 	if err != nil {
-		log.Printf("Health check failed for %s: %v", serviceName, err)
+		log.Printf("Falha no health check para %s: %v", serviceName, err)
 		hm.setServiceStatus(service, false, 0)
 		return
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == 429 {
-		log.Printf("Rate limited on health check for %s - keeping current status", serviceName)
-		return
-	}
-	if resp.StatusCode != 200 {
-		log.Printf("Health check for %s returned status %d", serviceName, resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
 		hm.setServiceStatus(service, false, 0)
 		return
 	}
+
 	var health HealthCheckResponse
 	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
-		log.Printf("Failed to decode health response for %s: %v", serviceName, err)
 		hm.setServiceStatus(service, false, 0)
 		return
 	}
+
 	available := !health.Failing
 	hm.setServiceStatus(service, available, health.MinResponseTime)
-	log.Printf("Health status updated for %s: available=%t, minResponseTime=%dms",
-		serviceName, available, health.MinResponseTime)
 }
