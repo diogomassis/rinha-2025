@@ -35,7 +35,10 @@ func HandlePostPayment(c *fiber.Ctx) error {
 }
 
 func HandleGetSummary(c *fiber.Ctx) error {
-	summary, err := Persistence.GetPaymentSummary()
+	fromParam := c.Query("from")
+	toParam := c.Query("to")
+
+	summary, err := Persistence.GetPaymentSummary(fromParam, toParam)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to retrieve payment summary"})
 	}
