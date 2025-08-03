@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/diogomassis/rinha-2025/internal/env"
-	chooserchecker "github.com/diogomassis/rinha-2025/internal/services/chooser-checker"
+	healthchecker "github.com/diogomassis/rinha-2025/internal/services/health-checker"
 	paymentprocessor "github.com/diogomassis/rinha-2025/internal/services/payment-processor"
 	"github.com/diogomassis/rinha-2025/internal/services/persistence"
 )
@@ -17,18 +17,17 @@ var (
 
 type Worker struct {
 	paymentRequestCh chan *PaymentJob
+	healthChecker    *healthchecker.HealthChecker
 	processors       map[string]*paymentprocessor.PaymentProcessor
-
-	chooser *chooserchecker.ChooserService
-	db      *persistence.PaymentPersistenceService
+	db               *persistence.PaymentPersistenceService
 
 	waitGroup sync.WaitGroup
 }
 
-func New(chooser *chooserchecker.ChooserService, db *persistence.PaymentPersistenceService) *Worker {
+func New(healthChecker *healthchecker.HealthChecker, db *persistence.PaymentPersistenceService) *Worker {
 	return &Worker{
 		paymentRequestCh: make(chan *PaymentJob, 1000),
-		chooser:          chooser,
+		healthChecker:    healthChecker,
 		db:               db,
 		processors: map[string]*paymentprocessor.PaymentProcessor{
 			"d": paymentprocessor.New("d", env.Env.ProcessorDefaultUrl),
@@ -52,7 +51,7 @@ func (w *Worker) Stop() {
 func (w *Worker) paymentProcessor() {
 	defer w.waitGroup.Done()
 	for job := range w.paymentRequestCh {
-		processorKey, err := w.chooser.ChooseNextService()
+		processorKey, err := w.healthChecker.ChooseNextService()
 		if err != nil {
 			continue
 		}
@@ -62,26 +61,16 @@ func (w *Worker) paymentProcessor() {
 		}
 		paymentResponse, err := processor.ProcessPayment(job.RequestPayment)
 		if err != nil {
+			w.healthChecker.RegisterServiceFailure(processorKey)
+			w.requeue(job)
 			continue
 		}
+		w.healthChecker.RegisterServiceSuccess(processorKey)
 		rowsAffected, err := w.db.SavePayment(paymentResponse)
 		if err != nil || rowsAffected == 0 {
-			go w.retryPersistPayment(paymentResponse) // <- Remember to review this retry logic
+			w.retryPersistPayment(paymentResponse)
 		}
 	}
-}
-
-func (w *Worker) retryPersistPayment(paymentResponse *paymentprocessor.PaymentResponse) (int64, error) {
-	var rowsAffected int64
-	var err error
-	for i := 0; i < 3; i++ {
-		rowsAffected, err = w.db.SavePayment(paymentResponse)
-		if err == nil && rowsAffected > 0 {
-			return rowsAffected, nil
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	return 0, err
 }
 
 func (w *Worker) AddPaymentJob(requestPayment *paymentprocessor.PaymentRequest) error {
@@ -103,4 +92,34 @@ func (w *Worker) AddPaymentJob(requestPayment *paymentprocessor.PaymentRequest) 
 		}
 		return fmt.Errorf("failed to enqueue payment job after %d retries", maxRetries)
 	}
+}
+
+func (w *Worker) requeue(job *PaymentJob) {
+	select {
+	case w.paymentRequestCh <- job:
+		return
+	default:
+		maxRetries := 3
+		for i := 0; i < maxRetries; i++ {
+			select {
+			case w.paymentRequestCh <- job:
+				return
+			default:
+				time.Sleep(50 * time.Millisecond)
+			}
+		}
+	}
+}
+
+func (w *Worker) retryPersistPayment(paymentResponse *paymentprocessor.PaymentResponse) (int64, error) {
+	var rowsAffected int64
+	var err error
+	for i := 0; i < 3; i++ {
+		rowsAffected, err = w.db.SavePayment(paymentResponse)
+		if err == nil && rowsAffected > 0 {
+			return rowsAffected, nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return 0, err
 }

@@ -7,7 +7,6 @@ import (
 
 	"github.com/diogomassis/rinha-2025/cmd/handlers"
 	"github.com/diogomassis/rinha-2025/internal/env"
-	chooserchecker "github.com/diogomassis/rinha-2025/internal/services/chooser-checker"
 	healthchecker "github.com/diogomassis/rinha-2025/internal/services/health-checker"
 	"github.com/diogomassis/rinha-2025/internal/services/persistence"
 	"github.com/diogomassis/rinha-2025/internal/services/worker"
@@ -23,8 +22,6 @@ func main() {
 	healthChecker := healthchecker.New()
 	healthChecker.Start()
 	defer healthChecker.Stop()
-
-	chooserChecker := chooserchecker.New(healthChecker)
 
 	config, err := pgxpool.ParseConfig(env.Env.DbUrl)
 	if err != nil {
@@ -45,7 +42,7 @@ func main() {
 
 	paymentPersistenceService := persistence.NewPaymentPersistenceService(db)
 
-	workerPool := worker.New(chooserChecker, paymentPersistenceService)
+	workerPool := worker.New(healthChecker, paymentPersistenceService)
 	workerPool.Start()
 	defer workerPool.Stop()
 
