@@ -35,11 +35,11 @@ func (pps *PaymentPersistenceService) GetPaymentSummary(from, to string) (paymen
 	query := `SELECT COUNT(*), SUM(amount) FROM payments WHERE processor = $1 AND requested_at BETWEEN $2 AND $3`
 	defaultSummary := paymentprocessor.PaymentSummaryItemResponse{}
 	fallbackSummary := paymentprocessor.PaymentSummaryItemResponse{}
-	err := pps.db.QueryRow(context.Background(), query, "d").Scan(&defaultSummary.TotalRequests, &defaultSummary.TotalAmount, from, to)
+	err := pps.db.QueryRow(context.Background(), query, "d", from, to).Scan(&defaultSummary.TotalRequests, &defaultSummary.TotalAmount)
 	if err != nil {
 		return paymentprocessor.PaymentSummaryResponse{}, err
 	}
-	err = pps.db.QueryRow(context.Background(), query, "f").Scan(&fallbackSummary.TotalRequests, &fallbackSummary.TotalAmount, from, to)
+	err = pps.db.QueryRow(context.Background(), query, "f", from, to).Scan(&fallbackSummary.TotalRequests, &fallbackSummary.TotalAmount)
 	if err != nil {
 		return paymentprocessor.PaymentSummaryResponse{}, err
 	}
