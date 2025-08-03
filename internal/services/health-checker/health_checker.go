@@ -53,7 +53,7 @@ func New() *HealthChecker {
 func (hm *HealthChecker) Start() {
 	hm.setServiceStatus(hm.defaultService, false, 0)
 	hm.setServiceStatus(hm.fallbackService, false, 0)
-	ticker := time.NewTicker(6 * time.Second)
+	ticker := time.NewTicker(5 * time.Second)
 
 	go func() {
 		for {
