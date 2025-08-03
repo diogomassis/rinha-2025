@@ -2,6 +2,7 @@ package healthchecker
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -107,6 +108,16 @@ func (hm *HealthChecker) RegisterServiceSuccess(serviceName string) {
 		return
 	}
 	atomic.StoreInt32(&service.failureCount, 0)
+}
+
+func (sc *HealthChecker) ChooseNextService() (string, error) {
+	if sc.IsDefaultServiceAvailable() {
+		return "d", nil
+	}
+	if sc.IsFallbackServiceAvailable() {
+		return "f", nil
+	}
+	return "", errors.New("no payment service is available at the moment")
 }
 
 func (hm *HealthChecker) isServiceAvailable(service *ServiceStatus) bool {
