@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -165,7 +164,6 @@ func (hm *HealthChecker) checkService(serviceName, baseURL string, service *Serv
 	url := fmt.Sprintf("%s/payments/service-health", baseURL)
 	resp, err := hm.client.Get(url)
 	if err != nil {
-		log.Printf("Falha no health check para %s: %v", serviceName, err)
 		hm.setServiceStatus(service, false, 0)
 		return
 	}
