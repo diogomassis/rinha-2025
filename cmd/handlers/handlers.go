@@ -40,7 +40,7 @@ func HandleGetSummary(c *fiber.Ctx) error {
 
 	summary, err := Persistence.GetPaymentSummary(fromParam, toParam)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to retrieve payment summary"})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to retrieve payment summary -> " + err.Error()})
 	}
 	var res dto.PaymentSummaryResponse
 	res.Default = dto.PaymentSummaryItemResponse{
