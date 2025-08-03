@@ -14,8 +14,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// IMPLEMENTAR O ENDPOINT DE RESUMO DE PAGAMENTOS
-
 func main() {
 	env.Load()
 
