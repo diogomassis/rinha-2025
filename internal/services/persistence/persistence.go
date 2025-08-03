@@ -30,3 +30,21 @@ func (pps *PaymentPersistenceService) SavePayment(payment *paymentprocessor.Paym
 	command, err := pps.db.Exec(context.Background(), query, arguments...)
 	return command.RowsAffected(), err
 }
+
+func (pps *PaymentPersistenceService) GetPaymentSummary() (paymentprocessor.PaymentSummaryResponse, error) {
+	query := `SELECT COUNT(*), SUM(amount) FROM payments WHERE processor = $1`
+	defaultSummary := paymentprocessor.PaymentSummaryItemResponse{}
+	fallbackSummary := paymentprocessor.PaymentSummaryItemResponse{}
+	err := pps.db.QueryRow(context.Background(), query, "d").Scan(&defaultSummary.TotalRequests, &defaultSummary.TotalAmount)
+	if err != nil {
+		return paymentprocessor.PaymentSummaryResponse{}, err
+	}
+	err = pps.db.QueryRow(context.Background(), query, "f").Scan(&fallbackSummary.TotalRequests, &fallbackSummary.TotalAmount)
+	if err != nil {
+		return paymentprocessor.PaymentSummaryResponse{}, err
+	}
+	return paymentprocessor.PaymentSummaryResponse{
+		Default:  defaultSummary,
+		Fallback: fallbackSummary,
+	}, nil
+}
