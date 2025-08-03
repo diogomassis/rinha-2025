@@ -18,7 +18,7 @@ var (
 func HandlePostPayment(c *fiber.Ctx) error {
 	var req dto.PaymentRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
 	}
 
 	paymentReq := &paymentprocessor.PaymentRequest{
@@ -28,17 +28,15 @@ func HandlePostPayment(c *fiber.Ctx) error {
 	}
 	err := Worker.AddPaymentJob(paymentReq)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal error while processing payment"})
 	}
-
 	return c.SendStatus(fiber.StatusAccepted)
 }
 
 func HandleGetSummary(c *fiber.Ctx) error {
-	fromParam := c.Query("from")
-	toParam := c.Query("to")
-
-	summary, err := Persistence.GetPaymentSummary(fromParam, toParam)
+	from := c.Query("from")
+	to := c.Query("to")
+	summary, err := Persistence.GetPaymentSummary(from, to)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to retrieve payment summary -> " + err.Error()})
 	}

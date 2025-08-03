@@ -19,16 +19,20 @@ func NewPaymentPersistenceService(db *pgxpool.Pool) *PaymentPersistenceService {
 
 func (pps *PaymentPersistenceService) SavePayment(payment *paymentprocessor.PaymentResponse) (int64, error) {
 	query := `
-		INSERT INTO payments (correlation_id, amount, processor, requested_at) VALUES ($1, $2, $3, $4)
+		INSERT INTO payments (correlation_id, amount, processor, requested_at) 
+		VALUES ($1, $2, $3, $4)
 	`
-	arguments := []any{
+	formattedTime := payment.RequestedAt.UTC().Format("2006-01-02T15:04:05.000Z")
+	command, err := pps.db.Exec(context.Background(), query,
 		payment.CorrelationID,
 		payment.Amount,
 		payment.Processor,
-		payment.RequestedAt,
+		formattedTime,
+	)
+	if err != nil {
+		return 0, err
 	}
-	command, err := pps.db.Exec(context.Background(), query, arguments...)
-	return command.RowsAffected(), err
+	return command.RowsAffected(), nil
 }
 
 func (pps *PaymentPersistenceService) GetPaymentSummary(from, to string) (paymentprocessor.PaymentSummaryResponse, error) {
