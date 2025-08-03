@@ -35,6 +35,18 @@ func HandlePostPayment(c *fiber.Ctx) error {
 }
 
 func HandleGetSummary(c *fiber.Ctx) error {
+	summary, err := Persistence.GetPaymentSummary()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to retrieve payment summary"})
+	}
 	var res dto.PaymentSummaryResponse
+	res.Default = dto.PaymentSummaryItemResponse{
+		TotalRequests: summary.Default.TotalRequests,
+		TotalAmount:   summary.Default.TotalAmount,
+	}
+	res.Fallback = dto.PaymentSummaryItemResponse{
+		TotalRequests: summary.Fallback.TotalRequests,
+		TotalAmount:   summary.Fallback.TotalAmount,
+	}
 	return c.JSON(res)
 }
