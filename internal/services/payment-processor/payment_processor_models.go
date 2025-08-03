@@ -14,3 +14,13 @@ type PaymentResponse struct {
 	Processor     string    `json:"processor"`
 	RequestedAt   time.Time `json:"requestedAt"`
 }
+
+type PaymentSummaryItemResponse struct {
+	TotalRequests int64   `json:"totalRequests"`
+	TotalAmount   float64 `json:"totalAmount"`
+}
+
+type PaymentSummaryResponse struct {
+	Default  PaymentSummaryItemResponse `json:"default"`
+	Fallback PaymentSummaryItemResponse `json:"fallback"`
+}
