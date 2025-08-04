@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
+	"math"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -12,19 +14,38 @@ import (
 	"github.com/diogomassis/rinha-2025/internal/env"
 )
 
+const (
+	failureRateThreshold  = 0.5
+	minRequestsForCircuit = 20
+	openStateDuration     = 30 * time.Second
+	healthCheckInterval   = 5 * time.Second
+	statsResetInterval    = 2 * time.Minute
+)
+
+type CircuitState int
+
+const (
+	StateClosed CircuitState = iota
+	StateOpen
+	StateHalfOpen
+)
+
 type ServiceStatus struct {
-	available       bool
-	minResponseTime int
-	failureCount    int32
-	lastFailure     time.Time
+	name            string
+	url             string
 	mutex           sync.RWMutex
+	state           CircuitState
+	lastStateChange time.Time
+
+	successCount    atomic.Int64
+	requestCount    atomic.Int64
+	avgResponseTime atomic.Int64
 }
 
 type HealthChecker struct {
-	defaultService  *ServiceStatus
-	fallbackService *ServiceStatus
-	client          *http.Client
-	quit            chan bool
+	services map[string]*ServiceStatus
+	client   *http.Client
+	quit     chan bool
 }
 
 type HealthCheckResponse struct {
@@ -33,153 +54,190 @@ type HealthCheckResponse struct {
 }
 
 func New() *HealthChecker {
-	return &HealthChecker{
-		defaultService:  &ServiceStatus{},
-		fallbackService: &ServiceStatus{},
+	hc := &HealthChecker{
+		services: make(map[string]*ServiceStatus),
 		client: &http.Client{
-			Timeout: 2 * time.Second,
+			Timeout: 30 * time.Second,
 			Transport: &http.Transport{
-				MaxIdleConns:        5,
-				MaxIdleConnsPerHost: 5,
-				IdleConnTimeout:     30 * time.Second,
-				DisableKeepAlives:   false,
+				MaxIdleConnsPerHost: 10,
+				MaxIdleConns:        20,
 			},
 		},
 		quit: make(chan bool),
 	}
+	hc.services["d"] = &ServiceStatus{name: "d", url: env.Env.ProcessorDefaultUrl}
+	hc.services["f"] = &ServiceStatus{name: "f", url: env.Env.ProcessorFallbackUrl}
+	return hc
 }
 
-func (hm *HealthChecker) Start() {
-	hm.setServiceStatus(hm.defaultService, false, 0)
-	hm.setServiceStatus(hm.fallbackService, false, 0)
-	ticker := time.NewTicker(5 * time.Second)
+func (hc *HealthChecker) Start() {
+	go hc.runHealthChecks()
+	go hc.resetStatsPeriodically()
+}
 
-	go func() {
-		for {
-			select {
-			case <-ticker.C:
-				go hm.checkService("d", env.Env.ProcessorDefaultUrl, hm.defaultService)
-				go hm.checkService("f", env.Env.ProcessorFallbackUrl, hm.fallbackService)
+func (hc *HealthChecker) Stop() {
+	close(hc.quit)
+}
 
-			case <-hm.quit:
-				ticker.Stop()
-				return
+func (hc *HealthChecker) RegisterServiceFailure(serviceName string) {
+	s, ok := hc.services[serviceName]
+	if !ok {
+		return
+	}
+
+	totalRequests := s.requestCount.Add(1)
+	successes := s.successCount.Load()
+
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if s.state == StateClosed && totalRequests >= minRequestsForCircuit {
+		failureRate := float64(totalRequests-successes) / float64(totalRequests)
+		if failureRate > failureRateThreshold {
+			log.Printf("WARN: Circuit Breaker for '%s' OPEN. Failure rate: %.2f%%", s.name, failureRate*100)
+			s.state = StateOpen
+			s.lastStateChange = time.Now()
+		}
+	}
+}
+
+func (hc *HealthChecker) RegisterServiceSuccess(serviceName string, responseTime time.Duration) {
+	s, ok := hc.services[serviceName]
+	if !ok {
+		return
+	}
+	s.requestCount.Add(1)
+	s.successCount.Add(1)
+
+	currentAvg := s.avgResponseTime.Load()
+	newAvg := (currentAvg + responseTime.Milliseconds()) / 2
+	s.avgResponseTime.Store(newAvg)
+
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if s.state == StateHalfOpen {
+		log.Printf("INFO: Service '%s' recovered. Circuit Breaker CLOSED.", s.name)
+		s.state = StateClosed
+		s.resetStats()
+	}
+}
+
+func (hc *HealthChecker) ChooseNextService() (string, error) {
+	var bestService *ServiceStatus
+	maxScore := -1.0
+
+	for _, s := range hc.services {
+		s.mutex.RLock()
+		state := s.state
+		s.mutex.RUnlock()
+
+		if state == StateOpen {
+			continue
+		}
+
+		score := hc.calculateHealthScore(s)
+		if score > maxScore {
+			maxScore = score
+			bestService = s
+		}
+	}
+
+	if bestService == nil {
+		return "", errors.New("nenhum serviço de pagamento está disponível no momento")
+	}
+	return bestService.name, nil
+}
+
+func (hc *HealthChecker) calculateHealthScore(s *ServiceStatus) float64 {
+	requests := s.requestCount.Load()
+	if requests < 5 {
+		return 1.0
+	}
+	successes := s.successCount.Load()
+
+	successRate := float64(successes) / float64(requests)
+
+	latency := float64(s.avgResponseTime.Load())
+	latencyScore := math.Exp(-0.005 * latency)
+
+	return (0.7 * successRate) + (0.3 * latencyScore)
+}
+
+func (s *ServiceStatus) resetStats() {
+	s.requestCount.Store(0)
+	s.successCount.Store(0)
+	s.avgResponseTime.Store(0)
+}
+
+func (hc *HealthChecker) runHealthChecks() {
+	ticker := time.NewTicker(healthCheckInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			for _, s := range hc.services {
+				go hc.checkService(s)
 			}
+		case <-hc.quit:
+			return
 		}
-	}()
+	}
 }
 
-func (hm *HealthChecker) Stop() {
-	close(hm.quit)
+func (hc *HealthChecker) resetStatsPeriodically() {
+	ticker := time.NewTicker(statsResetInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			log.Println("INFO: Resetting health statistics of services.")
+			for _, s := range hc.services {
+				s.mutex.Lock()
+				s.resetStats()
+				s.mutex.Unlock()
+			}
+		case <-hc.quit:
+			return
+		}
+	}
 }
 
-func (hm *HealthChecker) IsDefaultServiceAvailable() bool {
-	return hm.isServiceAvailable(hm.defaultService)
-}
+func (hc *HealthChecker) checkService(s *ServiceStatus) {
+	s.mutex.Lock()
+	if s.state == StateOpen && time.Since(s.lastStateChange) > openStateDuration {
+		log.Printf("INFO: Circuit Breaker for '%s' in HALF-OPEN mode.", s.name)
+		s.state = StateHalfOpen
+	}
+	s.mutex.Unlock()
 
-func (hm *HealthChecker) IsFallbackServiceAvailable() bool {
-	return hm.isServiceAvailable(hm.fallbackService)
-}
-
-func (hm *HealthChecker) GetDefaultMinResponseTime() int {
-	return hm.getMinResponseTime(hm.defaultService)
-}
-
-func (hm *HealthChecker) GetFallbackMinResponseTime() int {
-	return hm.getMinResponseTime(hm.fallbackService)
-}
-
-func (hm *HealthChecker) RegisterServiceFailure(serviceName string) {
-	service := hm.getServiceByName(serviceName)
-	if service == nil {
+	s.mutex.RLock()
+	state := s.state
+	s.mutex.RUnlock()
+	if state == StateOpen {
 		return
 	}
 
-	atomic.AddInt32(&service.failureCount, 1)
-	service.mutex.Lock()
-	service.lastFailure = time.Now()
-	service.mutex.Unlock()
-}
-
-func (hm *HealthChecker) RegisterServiceSuccess(serviceName string) {
-	service := hm.getServiceByName(serviceName)
-	if service == nil {
-		return
-	}
-	atomic.StoreInt32(&service.failureCount, 0)
-}
-
-func (sc *HealthChecker) ChooseNextService() (string, error) {
-	if sc.IsDefaultServiceAvailable() {
-		return "d", nil
-	}
-	if sc.IsFallbackServiceAvailable() {
-		return "f", nil
-	}
-	return "", errors.New("no payment service is available at the moment")
-}
-
-func (hm *HealthChecker) isServiceAvailable(service *ServiceStatus) bool {
-	if atomic.LoadInt32(&service.failureCount) >= 10 {
-		service.mutex.RLock()
-		lastFailure := service.lastFailure
-		service.mutex.RUnlock()
-
-		if time.Since(lastFailure) < 60*time.Second {
-			return false
+	url := fmt.Sprintf("%s/payments/service-health", s.url)
+	resp, err := hc.client.Get(url)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		s.mutex.Lock()
+		if s.state == StateHalfOpen {
+			log.Printf("WARN: Health check failed. Circuit Breaker for '%s' OPEN again.", s.name)
+			s.state = StateOpen
+			s.lastStateChange = time.Now()
 		}
-		atomic.StoreInt32(&service.failureCount, 0)
-	}
-	service.mutex.RLock()
-	isAvailable := service.available
-	service.mutex.RUnlock()
-	return isAvailable
-}
-
-func (hm *HealthChecker) getMinResponseTime(service *ServiceStatus) int {
-	service.mutex.RLock()
-	defer service.mutex.RUnlock()
-	return service.minResponseTime
-}
-
-func (hm *HealthChecker) setServiceStatus(service *ServiceStatus, available bool, minResponseTime int) {
-	service.mutex.Lock()
-	defer service.mutex.Unlock()
-
-	service.available = available
-	service.minResponseTime = minResponseTime
-}
-
-func (hm *HealthChecker) getServiceByName(name string) *ServiceStatus {
-	if name == "d" {
-		return hm.defaultService
-	}
-	if name == "f" {
-		return hm.fallbackService
-	}
-	return nil
-}
-
-func (hm *HealthChecker) checkService(serviceName, baseURL string, service *ServiceStatus) {
-	url := fmt.Sprintf("%s/payments/service-health", baseURL)
-	resp, err := hm.client.Get(url)
-	if err != nil {
-		hm.setServiceStatus(service, false, 0)
+		s.mutex.Unlock()
 		return
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		hm.setServiceStatus(service, false, 0)
-		return
-	}
-
 	var health HealthCheckResponse
-	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
-		hm.setServiceStatus(service, false, 0)
-		return
+	if json.NewDecoder(resp.Body).Decode(&health) == nil && !health.Failing {
+		s.mutex.Lock()
+		if s.state == StateHalfOpen {
+			log.Printf("INFO: Health check succeeded. Circuit Breaker for '%s' CLOSED.", s.name)
+			s.state = StateClosed
+			s.resetStats()
+		}
+		s.mutex.Unlock()
 	}
-
-	available := !health.Failing
-	hm.setServiceStatus(service, available, health.MinResponseTime)
 }
