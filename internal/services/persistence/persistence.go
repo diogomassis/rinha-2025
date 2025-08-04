@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"context"
+	"time"
 
 	paymentprocessor "github.com/diogomassis/rinha-2025/internal/services/payment-processor"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -34,7 +35,7 @@ func (pps *PaymentPersistenceService) SavePayment(payment *paymentprocessor.Paym
 	return command.RowsAffected(), nil
 }
 
-func (pps *PaymentPersistenceService) GetPaymentSummary(from, to string) (paymentprocessor.PaymentSummaryResponse, error) {
+func (pps *PaymentPersistenceService) GetPaymentSummary(from, to time.Time) (paymentprocessor.PaymentSummaryResponse, error) {
 	query := `SELECT COUNT(*), COALESCE(SUM(amount), 0) FROM payments WHERE processor = $1 AND requested_at BETWEEN $2 AND $3`
 	defaultSummary := paymentprocessor.PaymentSummaryItemResponse{}
 	fallbackSummary := paymentprocessor.PaymentSummaryItemResponse{}
