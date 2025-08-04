@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"errors"
+	"strings"
+	"time"
 
 	"github.com/diogomassis/rinha-2025/internal/dto"
 	paymentprocessor "github.com/diogomassis/rinha-2025/internal/services/payment-processor"
@@ -38,12 +40,43 @@ func HandlePostPayment(c *fiber.Ctx) error {
 }
 
 func HandleGetSummary(c *fiber.Ctx) error {
-	from := c.Query("from")
-	to := c.Query("to")
-	summary, err := Persistence.GetPaymentSummary(from, to)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to retrieve payment summary -> " + err.Error()})
+	fromStr := c.Query("from")
+	toStr := c.Query("to")
+
+	if fromStr == "" || toStr == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "both 'from' and 'to' query parameters are required"})
 	}
+	if !strings.HasSuffix(fromStr, "Z") {
+		fromStr = fromStr + "Z"
+	}
+	if !strings.HasSuffix(toStr, "Z") {
+		toStr = toStr + "Z"
+	}
+
+	layout := time.RFC3339Nano
+	fromTime, err := time.Parse(layout, fromStr)
+	if err != nil {
+		layout = "2006-01-02T15:04:05.000Z"
+		fromTime, err = time.Parse(layout, fromStr)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid 'from' date format"})
+		}
+	}
+
+	toTime, err := time.Parse(layout, toStr)
+	if err != nil {
+		layout = "2006-01-02T15:04:05.000Z"
+		toTime, err = time.Parse(layout, toStr)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid 'to' date format"})
+		}
+	}
+
+	summary, err := Persistence.GetPaymentSummary(fromTime, toTime)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch payment summary -> " + err.Error()})
+	}
+
 	var res dto.PaymentSummaryResponse
 	res.Default = dto.PaymentSummaryItemResponse{
 		TotalRequests: summary.Default.TotalRequests,
