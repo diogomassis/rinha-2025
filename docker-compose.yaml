@@ -15,7 +15,7 @@ services:
       resources:
         limits:
           cpus: "0.2"
-          memory: "35MB"
+          memory: "40MB"
 
   backend-1:
     image: rinha-2025
@@ -35,7 +35,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.50"
+          cpus: "0.4"
           memory: "100MB"
     restart: on-failure
 
@@ -57,7 +57,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.50"
+          cpus: "0.4"
           memory: "100MB"
     restart: on-failure
 
@@ -79,8 +79,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.3"
-          memory: "115MB"
+          cpus: "0.5"
+          memory: "110MB"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U rinha -d rinha -q"]
       interval: 3s
