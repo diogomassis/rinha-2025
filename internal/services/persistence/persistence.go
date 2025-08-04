@@ -22,12 +22,11 @@ func (pps *PaymentPersistenceService) SavePayment(payment *paymentprocessor.Paym
 		INSERT INTO payments (correlation_id, amount, processor, requested_at) 
 		VALUES ($1, $2, $3, $4)
 	`
-	formattedTime := payment.RequestedAt.UTC().Format("2006-01-02T15:04:05.000Z")
 	command, err := pps.db.Exec(context.Background(), query,
 		payment.CorrelationID,
 		payment.Amount,
 		payment.Processor,
-		formattedTime,
+		payment.RequestedAt,
 	)
 	if err != nil {
 		return 0, err
