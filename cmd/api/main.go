@@ -17,16 +17,12 @@ import (
 func main() {
 	env.Load()
 
-	healthChecker := healthchecker.New()
-	healthChecker.Start()
-	defer healthChecker.Stop()
-
 	config, err := pgxpool.ParseConfig(env.Env.DbUrl)
 	if err != nil {
 		log.Fatal("Failed to parse database URL:", err)
 	}
 	config.MaxConns = 30
-	config.MinConns = 10
+	config.MinConns = 1
 	config.MaxConnLifetime = 5 * time.Minute
 	config.MaxConnIdleTime = 1 * time.Minute
 	config.HealthCheckPeriod = 30 * time.Second
@@ -37,6 +33,10 @@ func main() {
 		log.Fatal("Failed to connect to DB with optimized config:", err)
 	}
 	defer db.Close()
+
+	healthChecker := healthchecker.New()
+	healthChecker.Start()
+	defer healthChecker.Stop()
 
 	paymentPersistenceService := persistence.NewPaymentPersistenceService(db)
 
@@ -51,5 +51,6 @@ func main() {
 	app.Post("/payments", handlers.HandlePostPayment)
 	app.Get("/payments-summary", handlers.HandleGetSummary)
 
+	log.Println("Starting server on port:", env.Env.Port)
 	log.Fatal(app.Listen(":" + env.Env.Port))
 }

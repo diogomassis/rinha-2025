@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"time"
+	"errors"
 
 	"github.com/diogomassis/rinha-2025/internal/dto"
 	paymentprocessor "github.com/diogomassis/rinha-2025/internal/services/payment-processor"
@@ -24,12 +24,16 @@ func HandlePostPayment(c *fiber.Ctx) error {
 	paymentReq := &paymentprocessor.PaymentRequest{
 		CorrelationID: req.CorrelationID,
 		Amount:        req.Amount,
-		RequestedAt:   time.Now().UTC(),
 	}
+
 	err := Worker.AddPaymentJob(paymentReq)
 	if err != nil {
+		if errors.Is(err, worker.ErrQueueFull) {
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "service unavailable, please try again later"})
+		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal error while processing payment"})
 	}
+
 	return c.SendStatus(fiber.StatusAccepted)
 }
 
